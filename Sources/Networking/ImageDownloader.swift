@@ -13,8 +13,6 @@ public struct ImageLoadingResult: Sendable {
     }
 }
 
-typealias DownloadResult = Result<ImageLoadingResult, NeoImageError>
-
 public final class ImageDownloader: Sendable  {
     public static let `default` = ImageDownloader(name: "default")
     
@@ -27,7 +25,7 @@ public final class ImageDownloader: Sendable  {
     
     public init(
         name: String,
-        requestsUsePipelining: Bool = true
+        requestsUsePipelining: Bool = false
     ) {
         self.name = name
         self.requestsUsePipelining = requestsUsePipelining
@@ -43,7 +41,37 @@ public final class ImageDownloader: Sendable  {
     deinit { session.invalidateAndCancel() }
     
     @discardableResult
-    public func downloadImageData(with url: URL) async throws -> (DownloadTask, Data) {
+    public func downloadImage(with url: URL, options: NeoImageOptions? = nil) async throws -> ImageLoadingResult {
+        let cacheKey = url.absoluteString
+        
+        if let cachedData = try? await ImageCache.shared.retrieveImage(forKey: cacheKey),
+           let cachedImage = UIImage(data: cachedData) {
+            return ImageLoadingResult(
+                image: cachedImage,
+                url: url,
+                originalData: cachedData
+            )
+        }
+        
+        let (_, imageData) = try await downloadImageData(with: url)
+        
+        guard let image = UIImage(data: imageData) else {
+            throw NeoImageError.responseError(reason: .invalidImageData)
+        }
+        
+        // 다운로드 결과 캐싱
+        try? await ImageCache.shared.store(imageData, forKey: cacheKey)
+        
+        return ImageLoadingResult(
+            image: image,
+            url: url,
+            originalData: imageData
+        )
+    }
+}
+
+extension ImageDownloader {
+    private func downloadImageData(with url: URL) async throws -> (DownloadTask, Data) {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: downloadTimeout)
         request.httpShouldUsePipelining = requestsUsePipelining
         
@@ -51,118 +79,24 @@ public final class ImageDownloader: Sendable  {
             throw NeoImageError.requestError(reason: .invalidURL(request: request))
         }
         
-        return try await createDownloadTaskWithData(context: DownloadingContext(
-            url: url,
-            request: request)
-        )
-    }
-}
-
-extension ImageDownloader {
-    private func createDownloadTaskWithData(context: DownloadingContext) async throws -> (DownloadTask, Data) {
-        // 여러 요청이 동시에 실행될 경우를 위한 액터 또는 동기화 메커니즘 필요
-        return try await withCheckedThrowingContinuation { continuation in
-            // 기존 태스크 확인 (중복 다운로드 방지)
-            if let existingTask = sessionDelegate.task(for: context.url) {
-                existingTask.onTaskDone.delegate(on: self) { (_, values) in
-                    let (result, callbacks) = values
-                    let downloadResult: DownloadResult
-                    
-                    switch result {
-                    case .success(let (data, _)):
-                        if let image = UIImage(data: data) {
-                            let imageResult = ImageLoadingResult(
-                                image: image,
-                                url: context.url,
-                                originalData: data
-                            )
-                            
-                            downloadResult = .success(imageResult)
-                        } else {
-                            downloadResult = .failure(NeoImageError.responseError(reason: .invalidImageData))
-                        }
-                    case .failure(let error):
-                        downloadResult = .failure(error)
-                    }
-                    
-                    // 모든 콜백 호출
-                    for callbackItem in callbacks {
-                        callbackItem.onCompleted?.call(downloadResult)
-                    }
-                }
-                
-                let downloadTask = DownloadTask()
-                
-                let onCompleted = Delegate<DownloadResult, Void>()
-                
-                onCompleted.delegate(on: self) { (self, result) in
-                    switch result {
-                    case .success(let imageResult):
-                        continuation.resume(returning: (downloadTask, imageResult.originalData))
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
-                    }
-                }
-                
-                let callback = SessionDataTask.TaskCallback(onCompleted: onCompleted)
-                let task = sessionDelegate.append(existingTask, callback: callback)
-                
-                Task {
-                    await downloadTask.linkToTask(task)
-                }
+        // SessionDataTask link 완료된 DownloadTask 생성
+        let downloadTask = await sessionDelegate.createTask(with: url, using: session)
+        
+        do {
+            // TODO: Kingfisher에서는 콜백패턴을 통해 선행 다운로드 작업이 진행중일때 스레드를 비울 수 있었으나, await 패턴을 도입하게 되면서, 백그라운드 스레드를 지속적으로 점유하고 있습니다. 이에 대한 대안을 모색해야합니다.
+            let (data, _) = try await downloadTask.sessionTask.result()
+            
+            guard UIImage(data: data) != nil else { // 이미지 유효성 검사
+                throw NeoImageError.responseError(reason: .invalidImageData)
+            }
+            
+            return (downloadTask, data)
+        } catch {
+            if let neoError = error as? NeoImageError {
+                throw neoError
             } else {
-                let sessionDataTask = session.dataTask(with: context.request)
-                let onCompleted = Delegate<DownloadResult, Void>()
-                let callback = SessionDataTask.TaskCallback(onCompleted: onCompleted)
-                
-                let downloadTask = sessionDelegate.add(sessionDataTask, url: context.url, callback: callback)
-                Task {
-                   await downloadTask.sessionTask?.onTaskDone.delegate(on: self) { (_, values) in
-                        let (result, callbacks) = values
-                        
-                        // 결과를 DownloadResult로 변환
-                        let downloadResult: DownloadResult
-                        switch result {
-                        case .success(let (data, _)):
-                            if let image = UIImage(data: data) {
-                                let imageResult = ImageLoadingResult(
-                                    image: image,
-                                    url: context.url,
-                                    originalData: data
-                                )
-                                downloadResult = .success(imageResult)
-                            } else {
-                                downloadResult = .failure(NeoImageError.responseError(reason: .invalidImageData))
-                            }
-                        case .failure(let error):
-                            downloadResult = .failure(error)
-                        }
-                        
-                        // 모든 콜백 호출
-                        for callbackItem in callbacks {
-                            callbackItem.onCompleted?.call(downloadResult)
-                        }
-                    }
-                }
-                
-                onCompleted.delegate(on: self) { (self, result) in
-                    switch result {
-                    case .success(let imageResult):
-                        continuation.resume(returning: (downloadTask, imageResult.originalData))
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
-                    }
-                }
-                
-                sessionDataTask.resume()
+                throw NeoImageError.responseError(reason: .URLSessionError(description: error.localizedDescription))
             }
         }
-    }
-}
-
-extension ImageDownloader {
-    struct DownloadingContext {
-        let url: URL
-        let request: URLRequest
     }
 }

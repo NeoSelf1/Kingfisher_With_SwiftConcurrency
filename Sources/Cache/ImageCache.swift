@@ -68,11 +68,7 @@ public final class ImageCache: Sendable {
         let diskData = try await diskStorage.value(forKey: key)
         
         if let diskData {
-            memoryStorage.store(
-                value: diskData,
-                forKey: key,
-                expiration: .days(7)
-            )
+            memoryStorage.store(value: diskData, forKey: key, expiration: .days(7))
         }
         
         return diskData
