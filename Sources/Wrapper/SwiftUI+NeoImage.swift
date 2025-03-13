@@ -41,7 +41,7 @@ class NeoImageBinder: ObservableObject {
         progress = .init()
         
         do {
-            let result = try await NeoImageManager.shared.downloadImage(with: url, options: options)
+            let result = try await ImageDownloader.default.downloadImage(with: url, options: options)
             
             await MainActor.run {
                 loadedImage = result.image
