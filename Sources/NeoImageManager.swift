@@ -48,23 +48,10 @@ public final class NeoImageManager: Sendable {
         // 다운로드 결과 캐싱
         try? await cache.store(imageData, forKey: cacheKey)
         
-        let result = ImageLoadingResult(
+        return ImageLoadingResult(
             image: image,
             url: url,
             originalData: imageData
         )
-        
-        // 이미지 프로세서가 있으면 이미지 처리
-        if let processor = options?.processor {
-            let processedImage = try await processor.process(result.image)
-            
-            return ImageLoadingResult(
-                image: processedImage,
-                url: url,
-                originalData: result.originalData
-            )
-        }
-        
-        return result
     }
 }

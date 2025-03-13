@@ -8,8 +8,6 @@ public actor DiskStorage<T: DataTransformable> {
     
     var maybeCached : Set<String>?
     
-    // MARK: - Lifecycle
-    
     init (
         name: String,
         fileManager: FileManager

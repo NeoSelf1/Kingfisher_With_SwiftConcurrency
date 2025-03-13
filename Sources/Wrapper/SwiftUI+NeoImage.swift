@@ -214,22 +214,10 @@ public struct NeoImage: View {
         return result
     }
     
-    /// 이미지 프로세서 설정 모디파이어
-    public func processor(_ processor: ImageProcessing) -> NeoImage {
-        var result = self
-        result.options = NeoImageOptions(
-            processor: processor,
-            transition: result.options.transition,
-            cacheExpiration: result.options.cacheExpiration
-        )
-        return result
-    }
-    
     /// 페이드 트랜지션 설정
     public func fade(duration: TimeInterval = 0.3) -> NeoImage {
         var result = self
         result.options = NeoImageOptions(
-            processor: result.options.processor,
             transition: .fade(duration),
             cacheExpiration: result.options.cacheExpiration
         )

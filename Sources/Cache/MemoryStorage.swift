@@ -18,6 +18,7 @@ public class MemoryStorage: @unchecked Sendable {
         self.totalCostLimit = totalCostLimit
         storage.totalCostLimit = totalCostLimit
         NeoLogger.shared.debug("initialized")
+        
         cleanTimer = .scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             removeExpired()
@@ -31,9 +32,6 @@ public class MemoryStorage: @unchecked Sendable {
         for key in keys {
             let nsKey = key as NSString
             guard let object = storage.object(forKey: nsKey) else {
-                // This could happen if the object is moved by cache `totalCostLimit` or `countLimit` rule.
-                // We didn't remove the key yet until now, since we do not want to introduce additional lock.
-                // See https://github.com/onevcat/Kingfisher/issues/1233
                 keys.remove(key)
                 continue
             }
@@ -72,14 +70,6 @@ public class MemoryStorage: @unchecked Sendable {
         }
         object.extendExpiration(extendingExpiration)
         return object.value
-    }
-
-    /// 캐시에서 있는지 여부를 조회
-    public func isCached(forKey key: String) -> Bool {
-        guard let _ = value(forKey: key, extendingExpiration: .none) else {
-            return false
-        }
-        return true
     }
     
     /// 캐시에서 제거

@@ -2,35 +2,34 @@ import Foundation
 
 public final actor DownloadTask: Sendable {
     private(set) var sessionTask: SessionDataTask?
-    private(set) var cancelToken: SessionDataTask.CancelToken?
     
     init(
-        sessionTask: SessionDataTask? = nil,
-        cancelToken: SessionDataTask.CancelToken? = nil
+        sessionTask: SessionDataTask? = nil
     ) {
         self.sessionTask = sessionTask
-        self.cancelToken = cancelToken
-        
-        NeoLogger.shared.debug("initialized")
     }
     
-    /// Cancel this single download task if it is running.
-    public func cancel() {
-        guard let sessionTask, let cancelToken else { return }
-        sessionTask.cancel(token: cancelToken)
+    /// 이 다운로드 작업이 실행 중인 경우 취소합니다.
+    public func cancel() async {
+        await sessionTask?.cancel()
     }
     
-    // DownloadTask가 제대로 초기화되었는지 확인하는 메서드
-    public var isInitialized: Bool {
-        sessionTask != nil && cancelToken != nil
+    func setSessionTask(_ task: SessionDataTask) async {
+        self.sessionTask = task
     }
     
-    // 다른 DownloadTask의 sessionTask와 cancelToken을 이 DownloadTask에 연결
-    func linkToTask(_ task: DownloadTask) {
-        Task {
-            guard await task.isInitialized else { return }
-            await sessionTask = task.sessionTask
-            await cancelToken = task.cancelToken
+    /// 다른 SessionDataTask에 링크
+    func linkToSessionTask(_ task: SessionDataTask) async {
+        self.sessionTask = task
+    }
+    
+    /// 작업 결과를 기다림
+    public func result() async throws -> (Data, URLResponse?) {
+        /// 본래 linkToSessionTask를 통해 sessionTask가 연결되어있어야 함 -> 이거 관련해서 체크
+        guard let sessionTask = sessionTask else {
+            throw NeoImageError.requestError(reason: .emptyRequest)
         }
+        
+        return try await sessionTask.result()
     }
 }
