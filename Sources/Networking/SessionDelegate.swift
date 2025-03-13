@@ -1,132 +1,58 @@
-
 import Foundation
 
+/// 프로젝트에 단일로 존재하며, 이미지 다운로드 URL과 SessionDataTask를 관리합니다.
 @objc(NeoImageDelegate)
-open class SessionDelegate: NSObject, @unchecked Sendable {
+public actor SessionDelegate: NSObject{
     private var tasks: [URL: SessionDataTask] = [:]
-    private let lock = NSLock()
 
-    let onValidStatusCode = Delegate<Int, Bool>()
-    let onReceiveChallenge = Delegate<URLAuthenticationChallenge, (URLSession.AuthChallengeDisposition, URLCredential?)>()
-    let onDownloadingFinished = Delegate<(URL, Result<URLResponse, NeoImageError>), Void>()
+    var authenticationChallengeHandler: ((URLAuthenticationChallenge) async -> (URLSession.AuthChallengeDisposition, URLCredential?))?
 
-    /// Adds a new download task with a URL and callback
-    func add(
-        _ dataTask: URLSessionDataTask,
-        url: URL,
-        callback: SessionDataTask.TaskCallback) -> DownloadTask
-    {
-        lock.lock()
-        defer { lock.unlock() }
-        
-        let task = SessionDataTask(task: dataTask)
-        NeoLogger.shared.info("task added from SessinDelegate")
-        task.onCallbackCancelled.delegate(on: self) { [weak task] (self, value) in
-            guard let task = task else { return }
+    /// 새 다운로드 작업 생성 기존 append랑 add 모두 포괄
+    func createTask(with url: URL, using session: URLSession) async -> DownloadTask {
+        if let existingTask = task(for: url) {
+            return DownloadTask(sessionTask: existingTask)
+        } else {
+            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15.0)
+            let dataTask = session.dataTask(with: request)
             
-            let (token, callback) = value
+            /// SessionDelegate가 관리하는 SessionDataTask 딕셔너리에 항목 갱신
+            let sessionTask = SessionDataTask(task: dataTask)
+            tasks[url] = sessionTask
             
-            let error = NeoImageError.requestError(reason: .taskCancelled(task: task,  token: token))
-            task.onTaskDone.call((.failure(error), [callback]))
+            /// URLSessionDataTask 작업 시작 -> URLSessionDataDelegate 프로토콜 메서드 호출 시작
+            await sessionTask.resume()
             
-            // Remove the task if no other callbacks waiting
-            if !task.containsCallbacks {
-                let dataTask = task.task
-                self.cancelTask(dataTask)
-                self.remove(task)
-            }
+            return DownloadTask(sessionTask: sessionTask)
         }
-        
-        let token = task.addCallback(callback)
-        tasks[url] = task
-        
-        return DownloadTask(sessionTask: task, cancelToken: token)
-    }
-    
-    /// Appends a callback to an existing task and returns a new DownloadTask
-    func append(
-        _ task: SessionDataTask,
-        callback: SessionDataTask.TaskCallback) -> DownloadTask
-    {
-        let token = task.addCallback(callback)
-        
-        return DownloadTask(sessionTask: task, cancelToken: token)
     }
 
-    /// Cancels a URLSessionDataTask
-    private func cancelTask(_ dataTask: URLSessionDataTask) {
-        lock.lock()
-        defer { lock.unlock() }
-        dataTask.cancel()
-    }
-
-    /// Removes a task
-    private func remove(_ task: SessionDataTask) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        guard let url = task.originalURL else {
-            return
-        }
-        
-        task.removeAllCallbacks()
-        tasks[url] = nil
-    }
-
-    /// Gets a task by URLSessionTask
-    private func task(for task: URLSessionTask) -> SessionDataTask? {
-        lock.lock()
-        defer { lock.unlock() }
-
-        guard let url = task.originalRequest?.url else {
-            return nil
-        }
-        guard let sessionTask = tasks[url] else {
-            return nil
-        }
-        guard sessionTask.task.taskIdentifier == task.taskIdentifier else {
-            return nil
-        }
-        return sessionTask
-    }
-
-    /// Gets a task by URL
+    /// URL에 해당하는 SessionDataTask 반환
     func task(for url: URL) -> SessionDataTask? {
-        lock.lock()
-        defer { lock.unlock() }
         return tasks[url]
     }
-
-    /// Cancels all tasks
-    func cancelAll() {
-        lock.lock()
-        let taskValues = tasks.values
-        lock.unlock()
-        for task in taskValues {
-            task.forceCancel()
-        }
-    }
-
-    /// Cancels a task for a URL
-    func cancel(url: URL) {
-        lock.lock()
-        let task = tasks[url]
-        lock.unlock()
-        task?.forceCancel()
+    
+    /// 작업 제거
+    func removeTask(_ task: SessionDataTask) {
+        guard let url = task.originalURL else { return }
+        tasks[url] = nil
     }
 }
 
 // MARK: - URLSessionDataDelegate
-
+// 각 작업의 상태(ready, running, completed, failed, cancelled)를 세밀하게 추적하기 위해 Delegate 메서드 사용이 필요합니다.
 extension SessionDelegate: URLSessionDataDelegate {
-    open func urlSession (
+    public func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse
     ) async -> URLSession.ResponseDisposition {
         guard response is HTTPURLResponse else {
-            let error = NeoImageError.responseError(reason: .URLSessionError(description: "invalid http Response"))
-            onCompleted(task: dataTask, result: .failure(error))
+            if let task = getSessionTask(for: dataTask) { // 유효하지 않은 응답 처리
+                let error = NeoImageError.responseError(reason: .URLSessionError(description: "invalid http Response"))
+                
+                await task.didComplete(with: .failure(error))
+                removeTask(task)
+            }
             
             return .cancel
         }
@@ -134,72 +60,68 @@ extension SessionDelegate: URLSessionDataDelegate {
         return .allow
     }
     
-    open func urlSession(
+    nonisolated public func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive data: Data
     ) {
-        guard let task = self.task(for: dataTask) else {
-            return
-        }
-        
-        task.didReceiveData(data)
-    }
-    
-    open func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
-        guard let sessionTask = self.task(for: task) else { return }
-        if let url = sessionTask.originalURL {
-            let result: Result<URLResponse, NeoImageError>
-            if let error = error {
-                result = .failure(NeoImageError.responseError(reason: .URLSessionError(description: error.localizedDescription)))
-            } else if let response = task.response {
-                result = .success(response)
-            } else {
-                result = .failure(NeoImageError.responseError(reason: .URLSessionError(description: "no http Response")))
+        Task {
+            if let task = await getSessionTask(for: dataTask) {
+                await task.didReceiveData(data)
             }
-            
-            onDownloadingFinished.call((url, result))
         }
-        
-        let result: Result<(Data, URLResponse?), NeoImageError>
-        
-        if let error = error {
-            result = .failure(NeoImageError.responseError(reason: .URLSessionError(description: error.localizedDescription)))
-        } else {
-            result = .success((sessionTask.mutableData, task.response))
-        }
-        
-        onCompleted(task: task, result: result)
     }
     
-    /// Called for task authentication challenge
-    open func urlSession(
+    /// Actor-isolated instance method 'urlSession(_:task:didCompleteWithError:)' cannot be @objc
+    /// Swift의 actor와 Objective-C 런타입 간 호환성 문제에 발생하는 컴파일 에러입니다.
+    /// URLSessionDelegate 메서드들은 모두 Objective-C 런타임을 통해 호출되기에 프로토콜을 구현하는 메서드는 @objc로 노출되어야 합니다.
+    /// SessionDelegate 클래스는 actor로 선언되어있기에 actor-isolated입니다. 이는 비동기적으로 실행되어야 합니다.
+    
+    /// 하지만 Objective-C는 Swift의 async/await의 actor 모델을 이해하지 못하기에 에러가 발생합니다.
+    ///
+    nonisolated public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        Task {
+            /// SessionDataTask가 actor로 마이그레이션 되면서, 내부 didComplete 메서드는 비동기 컨텍스트에서 실행되어야 합니다.
+            /// Actor-isolated instance method 'urlSession(_:task:didCompleteWithError:)' cannot be @objc
+            ///
+            if let sessionTask = await getSessionTask(for: task) {
+                if let error = error {
+                    await sessionTask.didComplete(with: .failure(error))
+                } else {
+                    await sessionTask.didComplete(with: .success(task.response))
+                }
+                await removeTask(sessionTask)
+            }
+        }
+    }
+    
+    public func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         didReceive challenge: URLAuthenticationChallenge
-    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?)
-    {
-        onReceiveChallenge(challenge) ?? (.performDefaultHandling, nil)
+    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+        if let handler = authenticationChallengeHandler {
+            return await handler(challenge)
+        }
+        
+        return (.performDefaultHandling, nil)
     }
     
-    private func onCompleted(task: URLSessionTask, result: Result<(Data, URLResponse?), NeoImageError>) {
-        /// SessionDataTask 탐색
-        guard let sessionTask = self.task(for: task) else {
-            return
-        }
+    // MARK: - 헬퍼 메서드
+    
+    /// URLSessionTask에 대응하는 SessionDataTask 찾기
+    private func getSessionTask(for task: URLSessionTask) -> SessionDataTask? {
+        guard let url = task.originalRequest?.url else { return nil }
         
-        let finalResult: Result<(Data, URLResponse?), NeoImageError>
+        guard let sessionTask = tasks[url] else { return nil }
         
-        if case .failure = result {
-            finalResult = result
-        } else {
-            finalResult = .success((sessionTask.mutableData, task.response))
-        }
+        // MARK: URLSesssionTask 클래스의 taskIdentifier로 기존 cancelToken 대체
+        guard sessionTask.task.taskIdentifier == task.taskIdentifier else { return nil }
         
-        let callbacks = sessionTask.removeAllCallbacks()
-        /// 대응되는 SessionDataTask의 onTaskDone 델리게이트를 통해 결과 및 콜백 전달
-        sessionTask.onTaskDone.call((finalResult, callbacks))
-        
-        remove(sessionTask)
+        return sessionTask
     }
 }
