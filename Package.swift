@@ -11,6 +11,9 @@ let package = Package(
         .library(
             name: "NeoImage", targets: ["NeoImage"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/onevcat/Kingfisher", from: "8.3.0")
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
@@ -20,7 +23,10 @@ let package = Package(
         ),
         .testTarget(
             name: "ImageViewExtensionTests",
-            dependencies: ["NeoImage"]
+            dependencies: [
+                "NeoImage",
+                .product(name: "Kingfisher", package: "Kingfisher"),
+            ]
         ),
     ]
 )
