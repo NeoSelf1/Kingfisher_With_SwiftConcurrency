@@ -34,7 +34,7 @@ extension NeoImageWrapper where Base: UIImageView {
         with url: URL?,
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
-    ) async throws -> (ImageLoadingResult, DownloadTask?) {
+    ) async throws -> ImageLoadingResult {
         // 이미지뷰가 실제로 화면에 표시되어 있는지 여부 파악,
         // 이는 Swift 6로 오면서 비동기 작업으로 간주되기 시작함.
         guard await base.window != nil else {
@@ -59,11 +59,11 @@ extension NeoImageWrapper where Base: UIImageView {
             await setImageDownloadTask(nil)
         }
         
-        let downloadTask = DownloadTask()
-        await setImageDownloadTask(downloadTask)
+//        let downloadTask = DownloadTask()
+//        await setImageDownloadTask(downloadTask)
         
         // NeoImageManager를 사용해 이미지 다운로드 (캐시 확인 + 이미지 후처리)
-        let downloadResult = try await NeoImageManager.shared.downloadImage(with: url, options: options)
+        let downloadResult = try await ImageDownloader.default.downloadImage(with: url, options: options)
         try Task.checkCancellation()
         
         // UI 업데이트
@@ -72,20 +72,20 @@ extension NeoImageWrapper where Base: UIImageView {
             base.image = downloadResult.image
             applyTransition(to: base, with: options?.transition)
         }
-
-        return (downloadResult, downloadTask)
+        return downloadResult
     }
 
     // MARK: - Wrapper
 
     /// `Public Async API`
     /// async/await 패턴이 적용된 환경에서 사용가능한 래퍼 메서드입니다.
+    @discardableResult
     public func setImage(
         with url: URL?,
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
     ) async throws -> ImageLoadingResult {
-        let (result, _) = try await setImageAsync(
+        let result = try await setImageAsync(
             with: url,
             placeholder: placeholder,
             options: options
@@ -95,18 +95,15 @@ extension NeoImageWrapper where Base: UIImageView {
     }
 
     /// `Public Completion Handler API`
-    @discardableResult
     public func setImage(
         with url: URL?,
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil,
         completion: (@MainActor @Sendable (Result<ImageLoadingResult, Error>) -> Void)? = nil
-    ) -> DownloadTask? {
-        let task = DownloadTask()
-
+    ) {
         Task { @MainActor in
             do {
-                let (result, _) = try await setImageAsync(
+                let result = try await setImageAsync(
                     with: url,
                     placeholder: placeholder,
                     options: options
@@ -114,12 +111,9 @@ extension NeoImageWrapper where Base: UIImageView {
 
                 completion?(.success(result))
             } catch {
-                await task.cancel()
                 completion?(.failure(error))
             }
         }
-
-        return task
     }
 
     @MainActor
