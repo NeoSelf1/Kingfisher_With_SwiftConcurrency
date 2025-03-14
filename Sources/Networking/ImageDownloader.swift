@@ -13,7 +13,7 @@ public struct ImageLoadingResult: Sendable {
     }
 }
 
-public final class ImageDownloader: @unchecked Sendable  {
+public final class ImageDownloader: Sendable  {
     public static let `default` = ImageDownloader(name: "default")
     
     private let downloadTimeout: TimeInterval = 15.0

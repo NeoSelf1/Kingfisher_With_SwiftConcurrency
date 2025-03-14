@@ -42,6 +42,7 @@ public class MemoryStorage: @unchecked Sendable {
             }
         }
     }
+    
     /// 캐시에 저장
     func store(
         value: Data,
@@ -51,7 +52,7 @@ public class MemoryStorage: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let expiration = expiration ?? NeoImageConstants.expiration
-        // The expiration indicates that already expired, no need to store.
+
         guard !expiration.isExpired else { return }
         
         let object = StorageObject(value as Data , expiration: expiration)
