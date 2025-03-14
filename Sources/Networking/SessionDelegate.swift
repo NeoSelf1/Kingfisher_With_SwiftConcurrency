@@ -7,7 +7,7 @@ public actor SessionDelegate: NSObject{
     
     var authenticationChallengeHandler: ((URLAuthenticationChallenge) async -> (URLSession.AuthChallengeDisposition, URLCredential?))?
     
-    func add(_ dataTask: URLSessionDataTask, url: URL) -> DownloadTask {
+    func add(_ dataTask: URLSessionDataTask, url: URL) async -> DownloadTask {
         let task = SessionDataTask(task: dataTask)
         var index = -1
         
@@ -21,11 +21,13 @@ public actor SessionDelegate: NSObject{
     }
     
     /// 기존 작업에 새 토큰 추가
-    func append(_ task: SessionDataTask) -> DownloadTask {
+    func append(_ task: SessionDataTask) async -> DownloadTask {
         var index = -1
+        
         Task {
             index = await task.addDownloadTask()
         }
+        
         return DownloadTask(sessionTask: task, index: index)
     }
     
@@ -91,7 +93,7 @@ extension SessionDelegate: URLSessionDataDelegate {
     ) async -> URLSession.ResponseDisposition {
         guard response is HTTPURLResponse else {
             Task {
-                taskCompleted(dataTask, with: nil, error: NeoImageError.responseError(reason: .URLSessionError(description: "Invalid HTTP Status Code")))
+                taskCompleted(dataTask, with: nil, error: NeoImageError.responseError(reason: .networkError(description: "Invalid HTTP Status Code")))
             }
             return .cancel
         }
@@ -155,7 +157,7 @@ extension SessionDelegate: URLSessionDataDelegate {
             
             let result: Result<(Data, URLResponse?), Error>
             if let error = error {
-                result = .failure(NeoImageError.responseError(reason: .URLSessionError(description: error.localizedDescription)))
+                result = .failure(NeoImageError.responseError(reason: .networkError(description: error.localizedDescription)))
             } else if let data = data {
                 result = .success((data, task.response))
             } else {

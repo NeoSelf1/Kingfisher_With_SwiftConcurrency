@@ -21,7 +21,6 @@ public final class ImageDownloader: @unchecked Sendable  {
     private let session: URLSession
     
     private let sessionDelegate: SessionDelegate
-    private var activeTasks: [URL: DownloadTask] = [:]
     
     public init(
         name: String
@@ -42,7 +41,7 @@ public final class ImageDownloader: @unchecked Sendable  {
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: downloadTimeout)
         
         guard let url = request.url, !url.absoluteString.isEmpty else {
-            throw NeoImageError.requestError(reason: .invalidURL(request: request))
+            throw NeoImageError.requestError(reason: .invalidURL)
         }
         
         let downloadTask = await createDownloadTask(url: url, request: request)
@@ -51,9 +50,6 @@ public final class ImageDownloader: @unchecked Sendable  {
     
     @discardableResult
     public func downloadImage(with downloadTask: DownloadTask, for url: URL) async throws -> ImageLoadingResult {
-        print("downloadImage activeTasks[url]", url, downloadTask)
-        activeTasks[url] = downloadTask
-        
         let imageData = try await downloadImageData(with: downloadTask)
        
         guard let image = UIImage(data: imageData) else {
@@ -64,8 +60,6 @@ public final class ImageDownloader: @unchecked Sendable  {
         try? await ImageCache.shared.store(imageData, forKey: cacheKey)
         
         NeoLogger.shared.debug("Image stored in cache with key: \(cacheKey)")
-        
-        activeTasks[url] = nil
         
         return ImageLoadingResult(
             image: image,
@@ -83,7 +77,7 @@ extension ImageDownloader {
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
             Task {
                 guard let sessionTask = await downloadTask.sessionTask else {
-                    continuation.resume(throwing: NeoImageError.responseError(reason: .URLSessionError(description: "Session task is nil")))
+                    continuation.resume(throwing: NeoImageError.requestError(reason: .invalidSessionTask))
                     return
                 }
                 

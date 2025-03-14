@@ -30,7 +30,7 @@ public actor DiskStorage<T: DataTransformable> {
     
     func store(value: T, forKey key: String, expiration: StorageExpiration? = nil) async throws {
         guard storageReady else {
-            throw CacheError.storageNotReady
+            throw NeoImageError.cacheError(reason: .storageNotReady)
         }
         
         let expiration = expiration ?? NeoImageConstants.expiration
@@ -38,7 +38,7 @@ public actor DiskStorage<T: DataTransformable> {
         guard !expiration.isExpired else { return }
         
         guard let data = try? value.toData() else {
-            throw CacheError.cannotConvertToData(object: value)
+            throw NeoImageError.cacheError(reason: .invalidData)
         }
         
         let fileURL = cacheFileURL(forKey: key)
@@ -64,10 +64,11 @@ public actor DiskStorage<T: DataTransformable> {
         } catch {
             try? fileManager.removeItem(at: fileURL)
             
-            throw CacheError.cannotSetCacheFileAttribute(
-                filePath: fileURL.path,
-                attributes: attributes,
-                error: error
+            throw NeoImageError.cacheError(
+                reason: .cannotSetCacheFileAttribute(
+                    path: fileURL.path,
+                    attribute: attributes
+                )
             )
         }
         
@@ -81,7 +82,7 @@ public actor DiskStorage<T: DataTransformable> {
         extendingExpiration: ExpirationExtending = .cacheTime // 현재 Config
     ) async throws -> T? {
         guard storageReady else {
-            throw CacheError.storageNotReady
+            throw NeoImageError.cacheError(reason: .storageNotReady)
         }
         
         let fileURL = cacheFileURL(forKey: key)
@@ -190,16 +191,12 @@ extension DiskStorage {
     }
     
     private func allFileURLs(for propertyKeys: [URLResourceKey]) throws -> [URL] {
-
         guard let directoryEnumerator = fileManager.enumerator(
-            at: directoryURL, includingPropertiesForKeys: propertyKeys, options: .skipsHiddenFiles) else
-        {
-            throw CacheError.fileEnumeratorCreationFailed
+            at: directoryURL, includingPropertiesForKeys: propertyKeys, options: .skipsHiddenFiles),
+              let urls = directoryEnumerator.allObjects as? [URL] else {
+            throw NeoImageError.cacheError(reason: .storageNotReady)
         }
 
-        guard let urls = directoryEnumerator.allObjects as? [URL] else {
-            throw CacheError.fileEnumeratorCreationFailed
-        }
         return urls
     }
     
@@ -236,7 +233,8 @@ extension DiskStorage {
             // 이는 추후 flag로 동작합니다.
             print("error creating New Directory")
             storageReady = false
-            throw CacheError.cannotCreateDirectory(error)
+            
+            throw NeoImageError.cacheError(reason: .cannotCreateDirectory(error: error))
         }
     }
 }
@@ -302,3 +300,4 @@ extension DiskStorage {
         }
     }
 }
+

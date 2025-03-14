@@ -1,84 +1,74 @@
 import Foundation
 
-enum CacheError: Sendable, Error {
-    // 데이터 관련 에러
-    case invalidData
-    case invalidImage
-    case dataToImageConversionFailed
-    case imageToDataConversionFailed
-
-    case fileEnumeratorCreationFailed
+public enum NeoImageError: Error, Sendable {
+    case requestError(reason: RequestErrorReason)
     
-    // 저장소 관련 에러
-    case diskStorageError(Error)
-    case memoryStorageError(Error)
-    case storageNotReady
-
-    // 파일 관련 에러
-    case fileNotFound(String) // key
-    case cannotCreateDirectory(Error)
-    case cannotWriteToFile(Error)
-    case cannotReadFromFile(Error)
-
-    case invalidURLResource
-    case cannotConvertToData(object: Sendable)
-    case cannotSetCacheFileAttribute(filePath: String, attributes: [FileAttributeKey : Sendable], error: any Error)
+    case responseError(reason: ResponseErrorReason)
     
-    /// 캐시 키 관련 에러
-    case invalidCacheKey
+    case cacheError(reason: CacheErrorReason)
+    
+    public enum RequestErrorReason: Sendable {
+        case invalidURL
+        case taskCancelled
+        case invalidSessionTask
+    }
+    
+    public enum ResponseErrorReason: Sendable {
+        case networkError(description: String)
+        case cancelled
+        case invalidImageData
+    }
+    
+    public enum CacheErrorReason: Sendable {
+        case invalidData
+        
+        case storageNotReady
+        case fileNotFound(key: String)
+        
+        case cannotCreateDirectory(error: Error)
+        case cannotSetCacheFileAttribute(path: String, attribute: [FileAttributeKey: Sendable])
+    }
+}
 
-    /// 기타
-    case unknown(Error)
-
-    // MARK: - Computed Properties
-
+extension NeoImageError.RequestErrorReason {
     var localizedDescription: String {
         switch self {
-        case .invalidData:
-            return "The data is invalid or corrupted"
-        case .invalidImage:
-            return "The image data is invalid"
-        case .dataToImageConversionFailed:
-            return "Failed to convert data to image"
-        case .imageToDataConversionFailed:
-            return "Failed to convert image to data"
-        case let .diskStorageError(error):
-            return "Disk storage error: \(error.localizedDescription)"
-        case let .memoryStorageError(error):
-            return "Memory storage error: \(error.localizedDescription)"
-        case .storageNotReady:
-            return "The storage is not ready"
-        case let .fileNotFound(key):
-            return "File not found for key: \(key)"
-        case let .cannotCreateDirectory(error):
-            return "Cannot create directory: \(error.localizedDescription)"
-        case let .cannotWriteToFile(error):
-            return "Cannot write to file: \(error.localizedDescription)"
-        case let .cannotReadFromFile(error):
-            return "Cannot read from file: \(error.localizedDescription)"
-        case .invalidCacheKey:
-            return "The cache key is invalid"
-        case let .unknown(error):
-            return "Unknown error: \(error.localizedDescription)"
-        default:
-            return ""
+        case .invalidURL:
+            return "잘못된 URL"
+        case .taskCancelled:
+            return "작업이 취소됨"
+        case .invalidSessionTask:
+            return "SessionDataTask가 존재하지 않음"
         }
     }
 }
 
-public enum NeoImageError: Error {
-    case requestError(reason: RequestErrorReason)
-    case responseError(reason: ResponseErrorReason)
-    
-    public enum RequestErrorReason: Sendable {
-        case invalidURL(request: URLRequest)
-        case emptyRequest
-        case taskCancelled(task: SessionDataTask, token: Int)
+extension NeoImageError.ResponseErrorReason {
+    var localizedDescription: String {
+        switch self {
+        case .networkError(let description):
+            return "네트워크 에러: \(description)"
+        case .cancelled:
+            return "다운로드가 취소됨"
+        case .invalidImageData:
+            return "유효하지 않은 이미지 데이터"
+        }
     }
-    
-    public enum ResponseErrorReason: Sendable {
-        case URLSessionError(description: String)
-        case cancelled
-        case invalidImageData
+}
+
+extension NeoImageError.CacheErrorReason {
+    var localizedDescription: String {
+        switch self {
+        case .invalidData:
+            return "유효하지 않은 데이터"
+        case .storageNotReady:
+            return "저장소가 준비되지 않음"
+        case .fileNotFound(let key):
+            return "파일을 찾을 수 없음: \(key)"
+        case .cannotCreateDirectory(let error):
+            return "디렉토리 생성 실패: \(error.localizedDescription)"
+        case .cannotSetCacheFileAttribute(let path, let attributes):
+            return "캐시 파일 속성 변경 실패 - 경로:\(path), 속성:\(attributes.keys)"
+        }
     }
 }

@@ -33,6 +33,7 @@ public actor SessionDataTask {
     }
     
     func removeDownloadTask(_ index: Int) -> Bool {
+        print("called:",index)
         return DownloadTaskIndices.remove(index) != nil
     }
     
@@ -49,9 +50,11 @@ public actor SessionDataTask {
     }
     
     func cancel(index: Int) {
-        if !hasActiveDownloadTask && removeDownloadTask(index) {
+        print("cancel from SessionDataTask started",index)
+        
+        if removeDownloadTask(index) && !hasActiveDownloadTask {
             // 모든 토큰이 취소되었을 때만 실제 작업 취소
-            print("cancel from SessionDataTask")
+            print("cancelled from SessionDataTask")
             task.cancel()
         }
     }

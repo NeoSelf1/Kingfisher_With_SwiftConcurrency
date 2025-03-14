@@ -39,7 +39,7 @@ public final class ImageCache: Sendable {
             
             notifications.forEach {
                 NotificationCenter.default.addObserver(self, selector: $0.1, name: $0.0, object: nil)
-            } // 각 알림에 대해 옵저버 등록
+            }
         }
     }
     

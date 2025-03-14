@@ -295,7 +295,6 @@ class ImageTestingContext {
 
 @Suite("NeoImage Performance Tests")
 struct NeoImagePerformanceTests {
-    
     @Test("NeoImage 기본 성능 테스트")
     func testNeoImagePerformance() async throws {
         let context = await ImageTestingContext()
@@ -543,4 +542,5 @@ struct NeoImagePerformanceTests {
         #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
         await context.cleanUp()
     }
+    
 }

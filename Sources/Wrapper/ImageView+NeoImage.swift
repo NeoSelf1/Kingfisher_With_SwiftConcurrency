@@ -38,7 +38,7 @@ extension NeoImageWrapper where Base: UIImageView {
         // 이미지뷰가 실제로 화면에 표시되어 있는지 여부 파악,
         // 이는 Swift 6로 오면서 비동기 작업으로 간주되기 시작함.
         guard await base.window != nil else {
-            throw CacheError.invalidData
+            throw NeoImageError.responseError(reason: .invalidImageData)
         }
 
         if let placeholder {
@@ -48,9 +48,10 @@ extension NeoImageWrapper where Base: UIImageView {
             }
         }
         
-        guard let url else { throw CacheError.invalidData }
+        guard let url else { throw NeoImageError.responseError(reason: .networkError(description: "url invalid")) }
         
         let cacheKey = url.absoluteString
+        
         if let cachedData = try? await ImageCache.shared.retrieveImage(key: cacheKey),
            let cachedImage = UIImage(data: cachedData) {
             await MainActor.run { [weak base] in
@@ -66,15 +67,14 @@ extension NeoImageWrapper where Base: UIImageView {
             )
         }
         
-        if let task = objc_getAssociatedObject(base, NeoImageConstants.associatedKey) as? DownloadTask {
-            print("cancelled")
-            await task.cancel()
+        if let task = objc_getAssociatedObject(base, &AssociatedKeys.downloadTask) as? DownloadTask {
+            try await task.cancelWithError()
             setImageDownloadTask(nil)
         }
         
         let downloadTask = try await ImageDownloader.default.createTask(with: url)
         setImageDownloadTask(downloadTask)
-        
+        print("setting Task completed in :\(base)")
         let result = try await ImageDownloader.default.downloadImage(with: downloadTask, for: url)
         // UI 업데이트
         await MainActor.run { [weak base] in
@@ -96,14 +96,14 @@ extension NeoImageWrapper where Base: UIImageView {
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
     ) async throws -> ImageLoadingResult {
-        let currentTime = Date()
+//        let currentTime = Date()
         let result = try await setImageAsync(
             with: url,
             placeholder: placeholder,
             options: options
         )
         
-        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
+//        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
         return result
     }
 
@@ -174,10 +174,9 @@ extension NeoImageWrapper where Base: UIImageView {
         // - NSArray
         // - NSDictionary
         // - URLSession
-        print("setImageDownloadTask: \(task)")
         objc_setAssociatedObject(
             base, // 대상 객체 (UIImageView)
-            NeoImageConstants.associatedKey, // 키 값
+            &AssociatedKeys.downloadTask, // 키 값
             task, // 저장할 값
             .OBJC_ASSOCIATION_RETAIN_NONATOMIC // 메모리 관리 정책
         )
