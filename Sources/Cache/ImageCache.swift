@@ -48,20 +48,16 @@ public final class ImageCache: Sendable {
     /// 메모리와 디스크 캐시에 모두 데이터를 저장합니다.
     public func store(
         _ data: Data,
-        forKey key: String,
-        expiration: StorageExpiration? = nil
+        forKey key: String
     ) async throws {
-        memoryStorage.store(value: data, forKey: key, expiration: expiration)
+        memoryStorage.store(value: data, forKey: key)
         
-        try await diskStorage.store(
-            value: data,
-            forKey: key,
-            expiration: expiration
-        )
+        try await diskStorage.store(value: data, forKey: key)
     }
     
     public func retrieveImage(forKey key: String) async throws -> Data? {
         if let memoryData = memoryStorage.value(forKey: key) {
+            print("Retriving from memory")
             return memoryData
         }
         

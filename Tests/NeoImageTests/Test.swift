@@ -62,14 +62,38 @@ class ImageTestingContext {
         URL(string: "https://picsum.photos/id/9/1200/1200")!,
         URL(string: "https://picsum.photos/id/10/1200/1200")!,
         URL(string: "https://picsum.photos/id/11/1200/1200")!,
-        URL(string: "https://picsum.photos/id/12/1200/1200")!
+        URL(string: "https://picsum.photos/id/12/1200/1200")!,
+        URL(string: "https://picsum.photos/id/13/1200/1200")!,
+        URL(string: "https://picsum.photos/id/14/1200/1200")!,
+        URL(string: "https://picsum.photos/id/15/1200/1200")!,
+        URL(string: "https://picsum.photos/id/16/1200/1200")!,
+        URL(string: "https://picsum.photos/id/17/1200/1200")!,
+        URL(string: "https://picsum.photos/id/18/1200/1200")!,
+        URL(string: "https://picsum.photos/id/19/1200/1200")!,
+        URL(string: "https://picsum.photos/id/20/1200/1200")!,
+        URL(string: "https://picsum.photos/id/21/1200/1200")!,
+        URL(string: "https://picsum.photos/id/22/1200/1200")!,
+        URL(string: "https://picsum.photos/id/23/1200/1200")!,
+        URL(string: "https://picsum.photos/id/24/1200/1200")!,
+        URL(string: "https://picsum.photos/id/25/1200/1200")!,
+        URL(string: "https://picsum.photos/id/26/1200/1200")!,
+        URL(string: "https://picsum.photos/id/27/1200/1200")!,
+        URL(string: "https://picsum.photos/id/28/1200/1200")!,
+        URL(string: "https://picsum.photos/id/29/1200/1200")!,
+        URL(string: "https://picsum.photos/id/30/1200/1200")!,
+        URL(string: "https://picsum.photos/id/31/1200/1200")!,
+        URL(string: "https://picsum.photos/id/32/1200/1200")!,
+        URL(string: "https://picsum.photos/id/33/1200/1200")!,
+        URL(string: "https://picsum.photos/id/34/1200/1200")!,
+        URL(string: "https://picsum.photos/id/35/1200/1200")!,
+        URL(string: "https://picsum.photos/id/36/1200/1200")!
     ]
     
     // 테스트 인프라
     var testWindow: UIWindow!
     let resultsManager = PerformanceResultsManager()
     let testImageSize = CGSize(width: 160, height: 160)
-    let gridImageCount = 12
+    let gridImageCount = 36
     
     // 테스트 컨테이너
     var neoImageViews: [UIImageView] = []
@@ -157,7 +181,7 @@ class ImageTestingContext {
     func loadWithNeoImage(imageView: UIImageView, url: URL) async throws -> Double {
         let startTime = Date()
         do {
-            let result = try await imageView.neo.setImage(with: url)
+            try await imageView.neo.setImage(with: url)
             let elapsedTime = Date().timeIntervalSince(startTime)
             
             // 결과 출력
@@ -167,6 +191,26 @@ class ImageTestingContext {
         } catch {
             print("Error loading image with NeoImage: \(error)")
             throw error
+        }
+    }
+    
+    func loadWithKingfisher(imageView: UIImageView, url: URL) async throws -> Double {
+        let startTime = Date()
+        return try await withCheckedThrowingContinuation { continuation in
+            imageView.kf.setImage(
+                with: url,
+                options: nil
+            ) { result in
+                switch result {
+                case .success(_):
+                    let elapsedTime = Date().timeIntervalSince(startTime)
+                    print("\(url.absoluteString) loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
+                    continuation.resume(returning: elapsedTime)
+                case .failure(let error):
+                    print("Error loading image with Kingfisher: \(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
     
@@ -185,28 +229,21 @@ class ImageTestingContext {
         }
     }
     
-    // MARK: - Kingfisher 테스트 메서드
-    
-    func loadWithKingfisher(imageView: UIImageView, url: URL) async throws -> Double {
-        return try await withCheckedThrowingContinuation { continuation in
-            let startTime = Date()
-            
-            imageView.kf.setImage(
-                with: url,
-                options: nil
-            ) { result in
-                switch result {
-                case .success(_):
-                    let elapsedTime = Date().timeIntervalSince(startTime)
-                    print("\(url.absoluteString) loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
-                    continuation.resume(returning: elapsedTime)
-                case .failure(let error):
-                    print("Error loading image with Kingfisher: \(error)")
-                    continuation.resume(throwing: error)
-                }
+    func loadSameImagesWithNeoImage() async throws {
+        for index in 0..<36 {
+            do {
+                let imageView = neoImageViews[index]
+                let elapsedTime = try await loadWithNeoImage(imageView: imageView, url: testImageURLs[0])
+                await resultsManager.addNeoImageTime(elapsedTime)
+            } catch {
+                print("Error in Kingfisher test at index \(index): \(error)")
+                await resultsManager.addNeoImageTime(-1.0)
             }
         }
     }
+    
+    
+    // MARK: - Kingfisher 테스트 메서드
     
     func loadImagesWithKingfisher() async throws {
         for (index, url) in testImageURLs.prefix(gridImageCount).enumerated() {
@@ -215,6 +252,19 @@ class ImageTestingContext {
             do {
                 let imageView = kingfisherImageViews[index]
                 let elapsedTime = try await loadWithKingfisher(imageView: imageView, url: url)
+                await resultsManager.addKingfisherTime(elapsedTime)
+            } catch {
+                print("Error in Kingfisher test at index \(index): \(error)")
+                await resultsManager.addKingfisherTime(-1.0)
+            }
+        }
+    }
+    
+    func loadSameImagesWithKingfisher() async throws {
+        for index in 0..<36 {
+            do {
+                let imageView = kingfisherImageViews[index]
+                let elapsedTime = try await loadWithKingfisher(imageView: imageView, url: testImageURLs[0])
                 await resultsManager.addKingfisherTime(elapsedTime)
             } catch {
                 print("Error in Kingfisher test at index \(index): \(error)")
@@ -289,6 +339,36 @@ struct NeoImagePerformanceTests {
         // 두 라이브러리 모두 테스트
         try await context.loadImagesWithNeoImage()
         try await context.loadImagesWithKingfisher()
+        
+        // 결과 가져오기
+        let neoStats = await context.resultsManager.getNeoImageStats()
+        let kfStats = await context.resultsManager.getKingfisherStats()
+        
+        // 성능 비교 출력
+        print("""
+        ======== 성능 비교 결과 ========
+        NeoImage  평균: \(String(format: "%.3f", neoStats.average)) 초 (최소: \(String(format: "%.3f", neoStats.min)), 최대: \(String(format: "%.3f", neoStats.max)))
+        Kingfisher 평균: \(String(format: "%.3f", kfStats.average)) 초 (최소: \(String(format: "%.3f", kfStats.min)), 최대: \(String(format: "%.3f", kfStats.max)))
+        차이: \(String(format: "%.3f", abs(neoStats.average - kfStats.average))) 초
+        ==============================
+        """)
+        
+        // 각 라이브러리가 기준 시간 내에 동작하는지 확인
+        #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
+        #expect(kfStats.average < 2.0, "Kingfisher 평균 로딩 시간이 2초 이내여야 합니다")
+        await context.cleanUp()
+    }
+    
+    @Test("NeoImage와 Kingfisher 중복 이미지 다운르도 방지 기능 비교")
+    func testCompareLibraryPerformanceForSameImages() async throws {
+        let context = await ImageTestingContext()
+        
+        // 모든 캐시 비우기
+        await context.clearAllCaches()
+        
+        // 두 라이브러리 모두 테스트
+        try await context.loadSameImagesWithNeoImage()
+        try await context.loadSameImagesWithKingfisher()
         
         // 결과 가져오기
         let neoStats = await context.resultsManager.getNeoImageStats()
@@ -421,6 +501,31 @@ struct NeoImagePerformanceTests {
         #expect(neoImprovementRate > 0.5, "NeoImage 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
         #expect(kfImprovementRate > 0.5, "Kingfisher 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
         
+        await context.cleanUp()
+    }
+    
+    @Test("NeoImage 중복 이미지 다운르도 방지 기능 비교")
+    func testNeoImagePerformanceForSameImages() async throws {
+        let context = await ImageTestingContext()
+        
+        // 모든 캐시 비우기
+        await context.clearAllCaches()
+        
+        // 두 라이브러리 모두 테스트
+        try await context.loadSameImagesWithNeoImage()
+        
+        // 결과 가져오기
+        let neoStats = await context.resultsManager.getNeoImageStats()
+        
+        // 성능 비교 출력
+        print("""
+        ======== 성능 비교 결과 ========
+        NeoImage  평균: \(String(format: "%.3f", neoStats.average)) 초 (최소: \(String(format: "%.3f", neoStats.min)), 최대: \(String(format: "%.3f", neoStats.max)))
+        ==============================
+        """)
+        
+        // 각 라이브러리가 기준 시간 내에 동작하는지 확인
+        #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
         await context.cleanUp()
     }
 }

@@ -13,22 +13,20 @@ public struct ImageLoadingResult: Sendable {
     }
 }
 
-public final class ImageDownloader: Sendable  {
+public final class ImageDownloader: @unchecked Sendable  {
     public static let `default` = ImageDownloader(name: "default")
     
     private let downloadTimeout: TimeInterval = 15.0
     private let name: String
     private let session: URLSession
     
-    private let requestsUsePipelining: Bool
     private let sessionDelegate: SessionDelegate
+    private var activeTasks: [URL: DownloadTask] = [:]
     
     public init(
-        name: String,
-        requestsUsePipelining: Bool = false
+        name: String
     ) {
         self.name = name
-        self.requestsUsePipelining = requestsUsePipelining
         self.sessionDelegate = SessionDelegate()
         
         self.session = URLSession(
@@ -53,14 +51,18 @@ public final class ImageDownloader: Sendable  {
             )
         }
         
-        let (_, imageData) = try await downloadImageData(with: url)
-        
+        let imageData = try await downloadImageData(with: url)
+        print("downloadImage \(imageData)")
+
         guard let image = UIImage(data: imageData) else {
             throw NeoImageError.responseError(reason: .invalidImageData)
         }
         
         // 다운로드 결과 캐싱
         try? await ImageCache.shared.store(imageData, forKey: cacheKey)
+        NeoLogger.shared.debug("Image stored in cache with key: \(cacheKey)")
+        
+        activeTasks[url] = nil
         
         return ImageLoadingResult(
             image: image,
@@ -68,35 +70,102 @@ public final class ImageDownloader: Sendable  {
             originalData: imageData
         )
     }
+    
+    /// 특정 URL의 다운로드를 취소합니다.
+    /// - Parameter url: 취소할 다운로드 URL
+    public func cancelDownload(for url: URL) async {
+        if let task = activeTasks[url] {
+            await task.cancel()
+            activeTasks[url] = nil
+            
+            NeoLogger.shared.debug("Download canceled for URL: \(url.absoluteString)")
+        }
+    }
+    
+    /// 모든 다운로드를 취소합니다.
+    public func cancelAllDownloads() async {
+        let urls = Array(activeTasks.keys)
+        for url in urls {
+            await cancelDownload(for: url)
+        }
+        NeoLogger.shared.debug("All downloads canceled")
+    }
 }
 
 extension ImageDownloader {
-    private func downloadImageData(with url: URL) async throws -> (DownloadTask, Data) {
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: downloadTimeout)
-        request.httpShouldUsePipelining = requestsUsePipelining
+    /// 이미지 데이터를 다운로드합니다.
+    /// - Parameter url: 다운로드할 URL
+    /// - Returns: 다운로드 작업과 데이터 튜플
+    private func downloadImageData(with url: URL) async throws -> Data {
+        // URL 요청 생성
+        let request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: downloadTimeout
+        )
         
+        // URL 유효성 검사
         guard let url = request.url, !url.absoluteString.isEmpty else {
             throw NeoImageError.requestError(reason: .invalidURL(request: request))
         }
+        // 다운로드 컨텍스트 생성
+        let downloadTask = await createDownloadTask(url: url, request: request)
+        activeTasks[url] = downloadTask
         
-        // SessionDataTask link 완료된 DownloadTask 생성
-        let downloadTask = await sessionDelegate.createTask(with: url, using: session)
-        
-        do {
-            // TODO: Kingfisher에서는 콜백패턴을 통해 선행 다운로드 작업이 진행중일때 스레드를 비울 수 있었으나, await 패턴을 도입하게 되면서, 백그라운드 스레드를 지속적으로 점유하고 있습니다. 이에 대한 대안을 모색해야합니다.
-            let (data, _) = try await downloadTask.sessionTask.result()
-            
-            guard UIImage(data: data) != nil else { // 이미지 유효성 검사
-                throw NeoImageError.responseError(reason: .invalidImageData)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+            Task {
+                guard let sessionTask = await downloadTask.sessionTask else {
+                    continuation.resume(throwing: NeoImageError.responseError(reason: .URLSessionError(description: "Session task is nil")))
+                    return
+                }
+                
+                if await sessionTask.isCompleted,
+                   let taskResult = await sessionTask.taskResult {
+                    print("sessionTask is Completed")
+                    switch taskResult {
+                    case .success(let (data, _)):
+                        if data.isEmpty {
+                            continuation.resume(throwing: NeoImageError.responseError(reason: .invalidImageData))
+                        } else {
+                            continuation.resume(returning: data)
+                        }
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+                
+                await sessionTask.onCallbackTaskDone.delegate(on: self) { (self, value) in
+                    let (result, _) = value
+                    print("onCallbackTaskDone is Delegated")
+                    
+                    switch result {
+                    case .success(let (data, _)):
+                        if data.isEmpty {
+                            continuation.resume(throwing: NeoImageError.responseError(reason: .invalidImageData))
+                        } else {
+                            continuation.resume(returning: data)
+                        }
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
             }
-            
-            return (downloadTask, data)
-        } catch {
-            if let neoError = error as? NeoImageError {
-                throw neoError
-            } else {
-                throw NeoImageError.responseError(reason: .URLSessionError(description: error.localizedDescription))
-            }
+        }
+    }
+    
+    /// 다운로드 작업을 생성하거나 기존 작업을 재사용합니다.
+    /// - Parameters:
+    ///   - url: 다운로드할 URL
+    ///   - request: URL 요청
+    /// - Returns: 다운로드 작업
+    private func createDownloadTask(url: URL, request: URLRequest) async -> DownloadTask {
+        // 기존 작업이 있는지 확인
+        if let existingTask = await sessionDelegate.task(for: url) {
+            return await sessionDelegate.append(existingTask)
+        } else {
+            // 새 작업 생성
+            let sessionDataTask = session.dataTask(with: request)
+            return await sessionDelegate.add(sessionDataTask, url: url)
         }
     }
 }

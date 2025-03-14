@@ -143,7 +143,10 @@ extension NeoImageWrapper where Base: UIImageView {
             )
         }
     }
-
+    
+//    public func cancelDownloadTask() {
+//        imageTask?.cancel()
+//    }
     // MARK: - Task Management
 
     /// UIImageView는 기본적으로 DownloadTask를 저장할 프로퍼티가 없습니다.
