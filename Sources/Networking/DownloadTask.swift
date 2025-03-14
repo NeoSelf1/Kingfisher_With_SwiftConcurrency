@@ -15,6 +15,7 @@ public final actor DownloadTask: Sendable {
     /// 이 다운로드 작업이 실행 중인 경우 취소합니다.
     public func cancel() async {
         guard let sessionTask, let index else { return }
+        print("cancel from DownloadTask")
         await sessionTask.cancel(index: index)
     }
     

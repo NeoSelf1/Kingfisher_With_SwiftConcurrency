@@ -40,38 +40,35 @@ extension NeoImageWrapper where Base: UIImageView {
         guard await base.window != nil else {
             throw CacheError.invalidData
         }
-        
+
         if let placeholder {
             await MainActor.run { [weak base] in
                 guard let base else { return }
                 base.image = placeholder
             }
         }
-        // TODO: gray로 차선책 placeholder 렌더 넣기
         
         guard let url else { throw CacheError.invalidData }
         
-        // TODO: DownloadTask 연결하기
         // UIImageView에 연결된 DownloadTask를 가져옵니다
         // 현재 진행 중인 다운로드 작업이 있는지 확인하는데 사용됩니다
+        print("objcResult: \(objc_getAssociatedObject(base, NeoImageConstants.associatedKey))")
         if let task = objc_getAssociatedObject(base, NeoImageConstants.associatedKey) as? DownloadTask {
+            print("cancelled0")
             await task.cancel()
             await setImageDownloadTask(nil)
         }
         
-//        let downloadTask = DownloadTask()
-//        await setImageDownloadTask(downloadTask)
-        
         // NeoImageManager를 사용해 이미지 다운로드 (캐시 확인 + 이미지 후처리)
-        let downloadResult = try await ImageDownloader.default.downloadImage(with: url, options: options)
+        let downloadResult = try await ImageDownloader.default.downloadImage(with: url, options: options, for: base)
         try Task.checkCancellation()
-        
         // UI 업데이트
         await MainActor.run { [weak base] in
             guard let base else { return }
             base.image = downloadResult.image
             applyTransition(to: base, with: options?.transition)
         }
+        
         return downloadResult
     }
 
@@ -85,12 +82,14 @@ extension NeoImageWrapper where Base: UIImageView {
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
     ) async throws -> ImageLoadingResult {
+        let currentTime = Date()
         let result = try await setImageAsync(
             with: url,
             placeholder: placeholder,
             options: options
         )
-
+        
+        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
         return result
     }
 
@@ -143,17 +142,13 @@ extension NeoImageWrapper where Base: UIImageView {
             )
         }
     }
-    
-//    public func cancelDownloadTask() {
-//        imageTask?.cancel()
-//    }
     // MARK: - Task Management
 
     /// UIImageView는 기본적으로 DownloadTask를 저장할 프로퍼티가 없습니다.
     ///
     /// 따라서, Objective-C의 런타임 기능을 사용해 UIImageView 인스턴스에 DownloadTask를 동적으로 연결하여 저장합니다,
     /// 현재 진행중인 이미지 다운로드 작업 추적에 사용됩니다.
-    private func setImageDownloadTask(_ task: DownloadTask?) async {
+    public func setImageDownloadTask(_ task: DownloadTask?) async {
         // 모든 NSObject의 하위 클래스에 대해 사용할 수 있는 메서드이며, SWift에서는 @obj 마킹이 된 클래스도 대상으로 설정이 가능합니다.
         // 순수 Swift 타입인 struct와 enum, class에는 사용이 불가하기 때문에, NSObject를 상속하거나 @objc 속성을 사용해야 합니다.
         // - `UIView` 및 모든 하위 클래스

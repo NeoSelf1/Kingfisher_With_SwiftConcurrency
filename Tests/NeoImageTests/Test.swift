@@ -3,7 +3,6 @@ import UIKit
 import NeoImage
 import Kingfisher
 
-/// 성능 측정용 결과 관리자
 actor PerformanceResultsManager {
     private(set) var neoImageTimes: [Double] = []
     private(set) var kingfisherTimes: [Double] = []
@@ -178,19 +177,37 @@ class ImageTestingContext {
     
     // MARK: - NeoImage 테스트 메서드
     
-    func loadWithNeoImage(imageView: UIImageView, url: URL) async throws -> Double {
+    func loadWithNeoImageAsync(imageView: UIImageView, url: URL) async throws -> Double {
         let startTime = Date()
         do {
             try await imageView.neo.setImage(with: url)
             let elapsedTime = Date().timeIntervalSince(startTime)
             
-            // 결과 출력
-            print("\(url.absoluteString) loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
+            print("***\(url.absoluteString) loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
             
             return elapsedTime
         } catch {
             print("Error loading image with NeoImage: \(error)")
             throw error
+        }
+    }
+    
+    func loadWithNeoImage(imageView: UIImageView, url: URL) async throws -> Double {
+        let startTime = Date()
+        return try await withCheckedThrowingContinuation { continuation in
+            imageView.neo.setImage(
+                with: url
+            ) { result in
+                switch result {
+                case .success(_):
+                    let elapsedTime = Date().timeIntervalSince(startTime)
+                    print("\(url.absoluteString) loaded with NeoImage in \(String(format: "%.6f", elapsedTime)) seconds")
+                    continuation.resume(returning: elapsedTime)
+                case .failure(let error):
+                    print("Error loading image with Kingfisher: \(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
     
@@ -220,7 +237,7 @@ class ImageTestingContext {
             
             do {
                 let imageView = neoImageViews[index]
-                let elapsedTime = try await loadWithNeoImage(imageView: imageView, url: url)
+                let elapsedTime = try await loadWithNeoImageAsync(imageView: imageView, url: url)
                 await resultsManager.addNeoImageTime(elapsedTime)
             } catch {
                 print("Error in NeoImage test at index \(index): \(error)")
@@ -400,10 +417,8 @@ struct NeoImagePerformanceTests {
         try await context.loadImagesWithNeoImage()
         let firstLoadStats = await context.resultsManager.getNeoImageStats()
         
-        // 결과 초기화
         await context.resultsManager.resetTimes()
         
-        // 두 번째 로드 - 캐시됨
         try await context.loadImagesWithNeoImage()
         let secondLoadStats = await context.resultsManager.getNeoImageStats()
         
@@ -472,6 +487,7 @@ struct NeoImagePerformanceTests {
         let neoFirstLoadStats = await context.resultsManager.getNeoImageStats()
         
         await context.resultsManager.resetTimes()
+        
         try await context.loadImagesWithKingfisher()
         let kfFirstLoadStats = await context.resultsManager.getKingfisherStats()
         
@@ -524,7 +540,6 @@ struct NeoImagePerformanceTests {
         ==============================
         """)
         
-        // 각 라이브러리가 기준 시간 내에 동작하는지 확인
         #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
         await context.cleanUp()
     }

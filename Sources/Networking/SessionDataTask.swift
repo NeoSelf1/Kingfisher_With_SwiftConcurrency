@@ -49,8 +49,9 @@ public actor SessionDataTask {
     }
     
     func cancel(index: Int) {
-        if  !hasActiveDownloadTask && removeDownloadTask(index) {
+        if !hasActiveDownloadTask && removeDownloadTask(index) {
             // 모든 토큰이 취소되었을 때만 실제 작업 취소
+            print("cancel from SessionDataTask")
             task.cancel()
         }
     }
@@ -62,7 +63,6 @@ public actor SessionDataTask {
     
     func complete(with result: Result<(Data, URLResponse?), Error>) {
         taskResult = result
-        print("complete called from SessionDelegate")
         isCompleted = true
         
         Task {
