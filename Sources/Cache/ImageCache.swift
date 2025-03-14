@@ -55,11 +55,12 @@ public final class ImageCache: Sendable {
         try await diskStorage.store(value: data, forKey: key)
     }
     
-    public func retrieveImageFromMemoryCache(forKey key: String) -> Data? {
-        return memoryStorage.value(forKey: key)
-    }
-    
-    public func retrieveImage(forKey key: String) async throws -> Data? {
+    public func retrieveImage(key: String) async throws -> Data? {
+        if let memoryData = memoryStorage.value(forKey: key) {
+            print("Retriving from memory")
+            return memoryData
+        }
+        
         let diskData = try await diskStorage.value(forKey: key)
         
         if let diskData {

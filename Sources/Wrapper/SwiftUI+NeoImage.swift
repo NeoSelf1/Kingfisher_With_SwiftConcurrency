@@ -40,20 +40,37 @@ class NeoImageBinder: ObservableObject {
         loading = true
         progress = .init()
         
+        // 캐시에서 먼저 확인
+        let cacheKey = url.absoluteString
+        if let cachedData = try? await ImageCache.shared.retrieveImage(key: cacheKey),
+           let cachedImage = UIImage(data: cachedData) {
+            loadedImage = cachedImage
+            loading = false
+            markLoaded()
+            return
+        }
+        
+        // 기존 다운로드 작업이 있으면 취소
+        if let task = downloadTask {
+            await task.cancel()
+            downloadTask = nil
+        }
+        
         do {
-            let result = try await ImageDownloader.default.downloadImage(with: url, options: options)
+            // 다운로드 태스크 생성 및 저장
+            let task = try await ImageDownloader.default.createTask(with: url)
+            downloadTask = task
             
-            await MainActor.run {
-                loadedImage = result.image
-                loading = false
-                markLoaded()
-            }
+            // 다운로드 수행
+            let result = try await ImageDownloader.default.downloadImage(with: task, for: url)
+            
+            loadedImage = result.image
+            loading = false
+            markLoaded()
         } catch {
-            await MainActor.run {
-                loadedImage = nil
-                loading = false
-                markLoaded()
-            }
+            loadedImage = nil
+            loading = false
+            markLoaded()
         }
     }
     
@@ -166,7 +183,7 @@ public struct NeoImage: View {
                 // 성공 콜백 호출
                 let result = ImageLoadingResult(image: image, url: url, originalData: Data())
                 onSuccess?(result)
-            } else if url != nil {
+            } else if url != nil && binder.loadedImage == nil {
                 // 실패 콜백 호출
                 onFailure?(NeoImageError.responseError(reason: .invalidImageData))
             }

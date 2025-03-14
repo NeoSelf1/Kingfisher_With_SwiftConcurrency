@@ -38,54 +38,21 @@ public final class ImageDownloader: @unchecked Sendable  {
     
     deinit { session.invalidateAndCancel() }
     
-    @discardableResult
-    public func downloadImage(with url: URL, options: NeoImageOptions? = nil, for base: Sendable? = nil) async throws -> ImageLoadingResult {
-        let cacheKey = url.absoluteString
-        
-        if let cachedDataFromMemory = ImageCache.shared.retrieveImageFromMemoryCache(forKey: cacheKey),
-           let cachedImage = UIImage(data: cachedDataFromMemory) {
-            return ImageLoadingResult(
-                image: cachedImage,
-                url: url,
-                originalData: cachedDataFromMemory
-            )
-        }
-        
-        if let cachedData = try? await ImageCache.shared.retrieveImage(forKey: cacheKey),
-           let cachedImage = UIImage(data: cachedData) {
-            return ImageLoadingResult(
-                image: cachedImage,
-                url: url,
-                originalData: cachedData
-            )
-        }
-        
+    public func createTask(with url: URL) async throws -> DownloadTask {
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: downloadTimeout)
         
-        // URL 유효성 검사
         guard let url = request.url, !url.absoluteString.isEmpty else {
             throw NeoImageError.requestError(reason: .invalidURL(request: request))
         }
         
-        // 다운로드 컨텍스트 생성
         let downloadTask = await createDownloadTask(url: url, request: request)
+        return downloadTask
+    }
+    
+    @discardableResult
+    public func downloadImage(with downloadTask: DownloadTask, for url: URL) async throws -> ImageLoadingResult {
+        print("downloadImage activeTasks[url]", url, downloadTask)
         activeTasks[url] = downloadTask
-        
-        // SwiftUI에서는 DownloadTask를 중간에 취소하기 위해 Objective-C 런타임 코드(objc_getAssociatedObject/objc_setAssociatedObject)를 호출할 필요가 없습니다.
-        if base is UIImageView {
-            print("""
-                task set: \(base.debugDescription), 
-                key: \(NeoImageConstants.associatedKey), 
-                downloadTask: \(downloadTask)
-            """)
-            
-            objc_setAssociatedObject(
-                base, // 대상 객체 (UIImageView)
-                NeoImageConstants.associatedKey, // 키 값
-                downloadTask, // 저장할 값
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC // 메모리 관리 정책
-            )
-        }
         
         let imageData = try await downloadImageData(with: downloadTask)
        
@@ -93,6 +60,7 @@ public final class ImageDownloader: @unchecked Sendable  {
             throw NeoImageError.responseError(reason: .invalidImageData)
         }
         
+        let cacheKey = url.absoluteString
         try? await ImageCache.shared.store(imageData, forKey: cacheKey)
         
         NeoLogger.shared.debug("Image stored in cache with key: \(cacheKey)")
