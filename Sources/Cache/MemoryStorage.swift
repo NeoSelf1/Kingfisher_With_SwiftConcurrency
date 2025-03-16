@@ -1,6 +1,6 @@
 import Foundation
 
-public class MemoryStorage: @unchecked Sendable {
+public actor MemoryStorage {
     // MARK: - Properties
 
     /// 캐시는 NSCache로 접근합니다.
@@ -8,8 +8,7 @@ public class MemoryStorage: @unchecked Sendable {
     private let totalCostLimit: Int
     
     var keys = Set<String>()
-    private var cleanTimer: Timer? = nil
-    private let lock = NSLock()
+    private var cleanTask: Task<Void, Never>? = nil
     
     // MARK: - Lifecycle
 
@@ -17,18 +16,31 @@ public class MemoryStorage: @unchecked Sendable {
         // 메모리가 사용할 수 있는 공간 상한선 (ImageCache 클래스에서 총 메모리공간의 1/4로 주입하고 있음) 데이터를 아래 private 속성에 주입시킵니다.
         self.totalCostLimit = totalCostLimit
         storage.totalCostLimit = totalCostLimit
+        
         NeoLogger.shared.debug("initialized")
         
-        cleanTimer = .scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            removeExpired()
+        Task {
+            await setupCleanTask()
         }
     }
 
+    private func setupCleanTask() {
+        // Timer 대신 Task로 주기적인 정리 작업 수행
+        cleanTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+                
+                // 취소 확인
+                if Task.isCancelled { break }
+                
+                // 만료된 항목 제거
+                removeExpired()
+            }
+        }
+    }
+    
     // MARK: - Functions
     public func removeExpired() {
-        lock.lock()
-        defer { lock.unlock() }
         for key in keys {
             let nsKey = key as NSString
             guard let object = storage.object(forKey: nsKey) else {
@@ -49,8 +61,6 @@ public class MemoryStorage: @unchecked Sendable {
         forKey key: String,
         expiration: StorageExpiration? = nil
     ) {
-        lock.lock()
-        defer { lock.unlock() }
         let expiration = expiration ?? NeoImageConstants.expiration
 
         guard !expiration.isExpired else { return }
@@ -66,25 +76,23 @@ public class MemoryStorage: @unchecked Sendable {
         guard let object = storage.object(forKey: key as NSString) else {
             return nil
         }
+        
         if object.isExpired {
             return nil
         }
+        
         object.extendExpiration(extendingExpiration)
         return object.value
     }
     
     /// 캐시에서 제거
     public func remove(forKey key: String) {
-        lock.lock()
-        defer { lock.unlock() }
         storage.removeObject(forKey: key as NSString)
         keys.remove(key)
     }
 
     /// Removes all values in this storage.
     public func removeAll() {
-        lock.lock()
-        defer { lock.unlock() }
         storage.removeAllObjects()
         keys.removeAll()
     }

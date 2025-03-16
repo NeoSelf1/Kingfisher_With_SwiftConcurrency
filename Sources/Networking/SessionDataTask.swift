@@ -5,7 +5,6 @@ import Foundation
 /// `SessionDataTask/CancelToken`을 사용하여 작업을 추적하고 취소를 관리합니다.
 public actor SessionDataTask {
     let task: URLSessionDataTask
-    
     let onCallbackTaskDone = Delegate<(Result<(Data, URLResponse?), Error>, Bool), Void>()
     
     private(set) var taskResult: Result<(Data, URLResponse?), Error>?
@@ -25,43 +24,12 @@ public actor SessionDataTask {
         NeoLogger.shared.info("initialized")
     }
     
-    func addDownloadTask() -> Int {
-        let index = currentIndex
-        DownloadTaskIndices.insert(index)
-        currentIndex += 1
-        return index
-    }
-    
-    func removeDownloadTask(_ index: Int) -> Bool {
-        print("called:",index)
-        return DownloadTaskIndices.remove(index) != nil
-    }
-    
-    var hasActiveDownloadTask: Bool {
-        return !DownloadTaskIndices.isEmpty
-    }
-    
     func didReceiveData(_ data: Data) {
         mutableData.append(data)
     }
     
     func resume() {
         task.resume()
-    }
-    
-    func cancel(index: Int) {
-        print("cancel from SessionDataTask started",index)
-        
-        if removeDownloadTask(index) && !hasActiveDownloadTask {
-            // 모든 토큰이 취소되었을 때만 실제 작업 취소
-            print("cancelled from SessionDataTask")
-            task.cancel()
-        }
-    }
-    
-    func forceCancel() {
-        DownloadTaskIndices.removeAll()
-        task.cancel()
     }
     
     func complete(with result: Result<(Data, URLResponse?), Error>) {
@@ -71,5 +39,34 @@ public actor SessionDataTask {
         Task {
             await onCallbackTaskDone((result, true))
         }
+    }
+}
+
+extension SessionDataTask {
+    func addDownloadTask() -> Int {
+        let index = currentIndex
+        DownloadTaskIndices.insert(index)
+        currentIndex += 1
+        return index
+    }
+    
+    func removeDownloadTask(_ index: Int) -> Bool {
+        return DownloadTaskIndices.remove(index) != nil
+    }
+    
+    var hasActiveDownloadTask: Bool {
+        return !DownloadTaskIndices.isEmpty
+    }
+    
+    func cancel(index: Int) {
+        if removeDownloadTask(index) && !hasActiveDownloadTask {
+            // 모든 토큰이 취소되었을 때만 실제 작업 취소
+            task.cancel()
+        }
+    }
+    
+    func forceCancel() {
+        DownloadTaskIndices.removeAll()
+        task.cancel()
     }
 }

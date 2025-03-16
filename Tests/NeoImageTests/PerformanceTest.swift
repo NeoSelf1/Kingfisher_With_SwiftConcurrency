@@ -50,42 +50,42 @@ actor PerformanceResultsManager {
 class ImageTestingContext {
     // 테스트용 이미지 URL 목록
     let testImageURLs: [URL] = [
-        URL(string: "https://picsum.photos/id/1/1200/1200")!,
-        URL(string: "https://picsum.photos/id/2/1200/1200")!,
-        URL(string: "https://picsum.photos/id/3/1200/1200")!,
-        URL(string: "https://picsum.photos/id/4/1200/1200")!,
-        URL(string: "https://picsum.photos/id/5/1200/1200")!,
-        URL(string: "https://picsum.photos/id/6/1200/1200")!,
-        URL(string: "https://picsum.photos/id/7/1200/1200")!,
-        URL(string: "https://picsum.photos/id/8/1200/1200")!,
-        URL(string: "https://picsum.photos/id/9/1200/1200")!,
-        URL(string: "https://picsum.photos/id/10/1200/1200")!,
-        URL(string: "https://picsum.photos/id/11/1200/1200")!,
-        URL(string: "https://picsum.photos/id/12/1200/1200")!,
-        URL(string: "https://picsum.photos/id/13/1200/1200")!,
-        URL(string: "https://picsum.photos/id/14/1200/1200")!,
-        URL(string: "https://picsum.photos/id/15/1200/1200")!,
-        URL(string: "https://picsum.photos/id/16/1200/1200")!,
-        URL(string: "https://picsum.photos/id/17/1200/1200")!,
-        URL(string: "https://picsum.photos/id/18/1200/1200")!,
-        URL(string: "https://picsum.photos/id/19/1200/1200")!,
-        URL(string: "https://picsum.photos/id/20/1200/1200")!,
-        URL(string: "https://picsum.photos/id/21/1200/1200")!,
-        URL(string: "https://picsum.photos/id/22/1200/1200")!,
-        URL(string: "https://picsum.photos/id/23/1200/1200")!,
-        URL(string: "https://picsum.photos/id/24/1200/1200")!,
-        URL(string: "https://picsum.photos/id/25/1200/1200")!,
-        URL(string: "https://picsum.photos/id/26/1200/1200")!,
-        URL(string: "https://picsum.photos/id/27/1200/1200")!,
-        URL(string: "https://picsum.photos/id/28/1200/1200")!,
-        URL(string: "https://picsum.photos/id/29/1200/1200")!,
-        URL(string: "https://picsum.photos/id/30/1200/1200")!,
-        URL(string: "https://picsum.photos/id/31/1200/1200")!,
-        URL(string: "https://picsum.photos/id/32/1200/1200")!,
-        URL(string: "https://picsum.photos/id/33/1200/1200")!,
-        URL(string: "https://picsum.photos/id/34/1200/1200")!,
-        URL(string: "https://picsum.photos/id/35/1200/1200")!,
-        URL(string: "https://picsum.photos/id/36/1200/1200")!
+        URL(string: "https://picsum.photos/id/1/2000/2000")!,
+        URL(string: "https://picsum.photos/id/2/2000/2000")!,
+        URL(string: "https://picsum.photos/id/3/2000/2000")!,
+        URL(string: "https://picsum.photos/id/4/2000/2000")!,
+        URL(string: "https://picsum.photos/id/5/2000/2000")!,
+        URL(string: "https://picsum.photos/id/6/2000/2000")!,
+        URL(string: "https://picsum.photos/id/7/2000/2000")!,
+        URL(string: "https://picsum.photos/id/8/2000/2000")!,
+        URL(string: "https://picsum.photos/id/9/2000/2000")!,
+        URL(string: "https://picsum.photos/id/10/2000/2000")!,
+        URL(string: "https://picsum.photos/id/11/2000/2000")!,
+        URL(string: "https://picsum.photos/id/12/2000/2000")!,
+        URL(string: "https://picsum.photos/id/13/2000/2000")!,
+        URL(string: "https://picsum.photos/id/14/2000/2000")!,
+        URL(string: "https://picsum.photos/id/15/2000/2000")!,
+        URL(string: "https://picsum.photos/id/16/2000/2000")!,
+        URL(string: "https://picsum.photos/id/17/2000/2000")!,
+        URL(string: "https://picsum.photos/id/18/2000/2000")!,
+        URL(string: "https://picsum.photos/id/19/2000/2000")!,
+        URL(string: "https://picsum.photos/id/20/2000/2000")!,
+        URL(string: "https://picsum.photos/id/21/2000/2000")!,
+        URL(string: "https://picsum.photos/id/22/2000/2000")!,
+        URL(string: "https://picsum.photos/id/23/2000/2000")!,
+        URL(string: "https://picsum.photos/id/24/2000/2000")!,
+        URL(string: "https://picsum.photos/id/25/2000/2000")!,
+        URL(string: "https://picsum.photos/id/26/2000/2000")!,
+        URL(string: "https://picsum.photos/id/27/2000/2000")!,
+        URL(string: "https://picsum.photos/id/28/2000/2000")!,
+        URL(string: "https://picsum.photos/id/29/2000/2000")!,
+        URL(string: "https://picsum.photos/id/30/2000/2000")!,
+        URL(string: "https://picsum.photos/id/31/2000/2000")!,
+        URL(string: "https://picsum.photos/id/32/2000/2000")!,
+        URL(string: "https://picsum.photos/id/33/2000/2000")!,
+        URL(string: "https://picsum.photos/id/34/2000/2000")!,
+        URL(string: "https://picsum.photos/id/35/2000/2000")!,
+        URL(string: "https://picsum.photos/id/36/2000/2000")!
     ]
     
     // 테스트 인프라
@@ -182,8 +182,7 @@ class ImageTestingContext {
         do {
             try await imageView.neo.setImage(with: url)
             let elapsedTime = Date().timeIntervalSince(startTime)
-            
-            print("***\(url.absoluteString) loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
+            print("\(url.lastPathComponent) loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
             
             return elapsedTime
         } catch {
@@ -201,7 +200,7 @@ class ImageTestingContext {
                 switch result {
                 case .success(_):
                     let elapsedTime = Date().timeIntervalSince(startTime)
-                    print("\(url.absoluteString) loaded with NeoImage in \(String(format: "%.6f", elapsedTime)) seconds")
+                    print("\(url.lastPathComponent) loaded with NeoImage in \(String(format: "%.6f", elapsedTime)) seconds")
                     continuation.resume(returning: elapsedTime)
                 case .failure(let error):
                     print("Error loading image with Kingfisher: \(error)")
@@ -221,7 +220,7 @@ class ImageTestingContext {
                 switch result {
                 case .success(_):
                     let elapsedTime = Date().timeIntervalSince(startTime)
-                    print("\(url.absoluteString) loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
+                    print("\(url.lastPathComponent) loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
                     continuation.resume(returning: elapsedTime)
                 case .failure(let error):
                     print("Error loading image with Kingfisher: \(error)")

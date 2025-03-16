@@ -24,6 +24,7 @@ final class NeoLogger: Sendable {
     private let logger: Logger
 
     private let infoHidden = true
+    private let debugHidden = true
     
     init() {
         dateFormatter = DateFormatter()
@@ -52,6 +53,7 @@ final class NeoLogger: Sendable {
         line _: Int = #line
     ) {
         guard !infoHidden else { return }
+        
         log(
             .info,
             message: message,
@@ -66,6 +68,8 @@ final class NeoLogger: Sendable {
         function: String = #function,
         line _: Int = #line
     ) {
+        guard !debugHidden else { return }
+        
         log(
             .debug,
             message: message,

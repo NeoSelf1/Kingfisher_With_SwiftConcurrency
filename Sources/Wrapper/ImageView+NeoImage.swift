@@ -74,7 +74,7 @@ extension NeoImageWrapper where Base: UIImageView {
         
         let downloadTask = try await ImageDownloader.default.createTask(with: url)
         setImageDownloadTask(downloadTask)
-        print("setting Task completed in :\(base)")
+        
         let result = try await ImageDownloader.default.downloadImage(with: downloadTask, for: url)
         // UI 업데이트
         await MainActor.run { [weak base] in

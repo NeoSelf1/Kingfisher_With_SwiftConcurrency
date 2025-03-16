@@ -123,7 +123,6 @@ class TestContext {
     
     // 이미지뷰에 다운로드 작업이 연결되어 있는지 확인
     func hasDownloadTask() -> Bool {
-        print("checking Task in :\(imageView)")
         let result = objc_getAssociatedObject(imageView, &AssociatedKeys.downloadTask)
         print(result)
         return objc_getAssociatedObject(imageView, &AssociatedKeys.downloadTask) as? DownloadTask != nil
