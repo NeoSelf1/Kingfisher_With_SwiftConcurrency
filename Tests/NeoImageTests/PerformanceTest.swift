@@ -182,7 +182,7 @@ class ImageTestingContext {
         do {
             try await imageView.neo.setImage(with: url)
             let elapsedTime = Date().timeIntervalSince(startTime)
-            print("\(url.lastPathComponent) loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
+            print("loaded with NeoImage in \(String(format: "%.3f", elapsedTime)) seconds")
             
             return elapsedTime
         } catch {
@@ -200,7 +200,7 @@ class ImageTestingContext {
                 switch result {
                 case .success(_):
                     let elapsedTime = Date().timeIntervalSince(startTime)
-                    print("\(url.lastPathComponent) loaded with NeoImage in \(String(format: "%.6f", elapsedTime)) seconds")
+                    print("loaded with NeoImage in \(String(format: "%.6f", elapsedTime)) seconds")
                     continuation.resume(returning: elapsedTime)
                 case .failure(let error):
                     print("Error loading image with Kingfisher: \(error)")
@@ -220,7 +220,7 @@ class ImageTestingContext {
                 switch result {
                 case .success(_):
                     let elapsedTime = Date().timeIntervalSince(startTime)
-                    print("\(url.lastPathComponent) loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
+                    print("loaded with Kingfisher in \(String(format: "%.3f", elapsedTime)) seconds")
                     continuation.resume(returning: elapsedTime)
                 case .failure(let error):
                     print("Error loading image with Kingfisher: \(error)")
@@ -249,7 +249,7 @@ class ImageTestingContext {
         for index in 0..<36 {
             do {
                 let imageView = neoImageViews[index]
-                let elapsedTime = try await loadWithNeoImage(imageView: imageView, url: testImageURLs[0])
+                let elapsedTime = try await loadWithNeoImageAsync(imageView: imageView, url: testImageURLs[0])
                 await resultsManager.addNeoImageTime(elapsedTime)
             } catch {
                 print("Error in Kingfisher test at index \(index): \(error)")
@@ -344,6 +344,7 @@ struct NeoImagePerformanceTests {
         await context.cleanUp()
     }
     
+    // 1
     @Test("NeoImage와 Kingfisher 성능 비교")
     func testCompareLibraryPerformance() async throws {
         let context = await ImageTestingContext()
@@ -374,6 +375,7 @@ struct NeoImagePerformanceTests {
         await context.cleanUp()
     }
     
+    // 2
     @Test("NeoImage와 Kingfisher 중복 이미지 다운르도 방지 기능 비교")
     func testCompareLibraryPerformanceForSameImages() async throws {
         let context = await ImageTestingContext()
@@ -401,6 +403,72 @@ struct NeoImagePerformanceTests {
         // 각 라이브러리가 기준 시간 내에 동작하는지 확인
         #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
         #expect(kfStats.average < 2.0, "Kingfisher 평균 로딩 시간이 2초 이내여야 합니다")
+        await context.cleanUp()
+    }
+    
+    // 3
+    @Test("캐시 성능 비교: NeoImage vs Kingfisher")
+    func testCompareCachePerformance() async throws {
+        let context = await ImageTestingContext()
+        
+        // 모든 캐시 비우기
+        await context.clearAllCaches()
+        
+        // 첫 번째 로드 - 캐시 없음
+        try await context.loadImagesWithNeoImage()
+        let neoFirstLoadStats = await context.resultsManager.getNeoImageStats()
+        
+        await context.resultsManager.resetTimes()
+        
+        try await context.loadImagesWithKingfisher()
+        let kfFirstLoadStats = await context.resultsManager.getKingfisherStats()
+        
+        // 결과 초기화
+        await context.resultsManager.resetTimes()
+        
+        // 두 번째 로드 - 캐시됨
+        try await context.loadImagesWithNeoImage()
+        let neoSecondLoadStats = await context.resultsManager.getNeoImageStats()
+        
+        await context.resultsManager.resetTimes()
+        try await context.loadImagesWithKingfisher()
+        let kfSecondLoadStats = await context.resultsManager.getKingfisherStats()
+        
+        // 개선율 계산
+        let neoImprovementRate = 1 - (neoSecondLoadStats.average / neoFirstLoadStats.average)
+        let kfImprovementRate = 1 - (kfSecondLoadStats.average / kfFirstLoadStats.average)
+        
+        print("""
+        ======== 캐시 성능 비교 ========
+        NeoImage 개선율: \(String(format: "%.1f", neoImprovementRate * 100))%
+        Kingfisher 개선율: \(String(format: "%.1f", kfImprovementRate * 100))%
+        ==============================
+        """)
+        
+        // 각 라이브러리의 캐시 개선율을 확인
+        #expect(neoImprovementRate > 0.5, "NeoImage 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
+        #expect(kfImprovementRate > 0.5, "Kingfisher 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
+        
+        await context.cleanUp()
+    }
+    
+    
+    @Test("NeoImage 중복 이미지 다운르도 방지 기능 비교")
+    func testNeoImagePerformanceForSameImages() async throws {
+        let context = await ImageTestingContext()
+        await context.clearAllCaches()
+        
+        try await context.loadSameImagesWithNeoImage()
+        
+        let neoStats = await context.resultsManager.getNeoImageStats()
+        
+        print("""
+        ======== 성능 비교 결과 ========
+        NeoImage  평균: \(String(format: "%.3f", neoStats.average)) 초 (최소: \(String(format: "%.3f", neoStats.min)), 최대: \(String(format: "%.3f", neoStats.max)))
+        ==============================
+        """)
+        
+        #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
         await context.cleanUp()
     }
     
@@ -472,74 +540,4 @@ struct NeoImagePerformanceTests {
         
         await context.cleanUp()
     }
-    
-    @Test("캐시 성능 비교: NeoImage vs Kingfisher")
-    func testCompareCachePerformance() async throws {
-        let context = await ImageTestingContext()
-        
-        // 모든 캐시 비우기
-        await context.clearAllCaches()
-        
-        // 첫 번째 로드 - 캐시 없음
-        try await context.loadImagesWithNeoImage()
-        let neoFirstLoadStats = await context.resultsManager.getNeoImageStats()
-        
-        await context.resultsManager.resetTimes()
-        
-        try await context.loadImagesWithKingfisher()
-        let kfFirstLoadStats = await context.resultsManager.getKingfisherStats()
-        
-        // 결과 초기화
-        await context.resultsManager.resetTimes()
-        
-        // 두 번째 로드 - 캐시됨
-        try await context.loadImagesWithNeoImage()
-        let neoSecondLoadStats = await context.resultsManager.getNeoImageStats()
-        
-        await context.resultsManager.resetTimes()
-        try await context.loadImagesWithKingfisher()
-        let kfSecondLoadStats = await context.resultsManager.getKingfisherStats()
-        
-        // 개선율 계산
-        let neoImprovementRate = 1 - (neoSecondLoadStats.average / neoFirstLoadStats.average)
-        let kfImprovementRate = 1 - (kfSecondLoadStats.average / kfFirstLoadStats.average)
-        
-        print("""
-        ======== 캐시 성능 비교 ========
-        NeoImage 개선율: \(String(format: "%.1f", neoImprovementRate * 100))%
-        Kingfisher 개선율: \(String(format: "%.1f", kfImprovementRate * 100))%
-        ==============================
-        """)
-        
-        // 각 라이브러리의 캐시 개선율을 확인
-        #expect(neoImprovementRate > 0.5, "NeoImage 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
-        #expect(kfImprovementRate > 0.5, "Kingfisher 캐시 사용 시 최소 50% 이상 속도가 개선되어야 합니다")
-        
-        await context.cleanUp()
-    }
-    
-    @Test("NeoImage 중복 이미지 다운르도 방지 기능 비교")
-    func testNeoImagePerformanceForSameImages() async throws {
-        let context = await ImageTestingContext()
-        
-        // 모든 캐시 비우기
-        await context.clearAllCaches()
-        
-        // 두 라이브러리 모두 테스트
-        try await context.loadSameImagesWithNeoImage()
-        
-        // 결과 가져오기
-        let neoStats = await context.resultsManager.getNeoImageStats()
-        
-        // 성능 비교 출력
-        print("""
-        ======== 성능 비교 결과 ========
-        NeoImage  평균: \(String(format: "%.3f", neoStats.average)) 초 (최소: \(String(format: "%.3f", neoStats.min)), 최대: \(String(format: "%.3f", neoStats.max)))
-        ==============================
-        """)
-        
-        #expect(neoStats.average < 2.0, "NeoImage 평균 로딩 시간이 2초 이내여야 합니다")
-        await context.cleanUp()
-    }
-    
 }

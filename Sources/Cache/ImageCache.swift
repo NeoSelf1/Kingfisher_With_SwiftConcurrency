@@ -50,13 +50,13 @@ public final class ImageCache: Sendable {
         _ data: Data,
         forKey key: String
     ) async throws {
-        memoryStorage.store(value: data, forKey: key)
+        await memoryStorage.store(value: data, forKey: key)
         
         try await diskStorage.store(value: data, forKey: key)
     }
     
     public func retrieveImage(key: String) async throws -> Data? {
-        if let memoryData = memoryStorage.value(forKey: key) {
+        if let memoryData = await memoryStorage.value(forKey: key) {
             print("Retriving from memory")
             return memoryData
         }
@@ -64,7 +64,7 @@ public final class ImageCache: Sendable {
         let diskData = try await diskStorage.value(forKey: key)
         
         if let diskData {
-            memoryStorage.store(value: diskData, forKey: key, expiration: .days(7))
+            await memoryStorage.store(value: diskData, forKey: key, expiration: .days(7))
         }
         
         return diskData
@@ -74,7 +74,7 @@ public final class ImageCache: Sendable {
     public func clearCache() {
         Task{
             do {
-                memoryStorage.removeAll()
+                await memoryStorage.removeAll()
                 
                 try await diskStorage.removeAll()
             } catch {
@@ -84,7 +84,9 @@ public final class ImageCache: Sendable {
     }
     
     @objc public func clearMemoryCache() {
-        memoryStorage.removeAll()
+        Task {
+            await memoryStorage.removeAll()
+        }
     }
     
     @objc func cleanExpiredDiskCache() {

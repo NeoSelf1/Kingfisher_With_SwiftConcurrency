@@ -37,6 +37,7 @@ extension NeoImageWrapper where Base: UIImageView {
     ) async throws -> ImageLoadingResult {
         // 이미지뷰가 실제로 화면에 표시되어 있는지 여부 파악,
         // 이는 Swift 6로 오면서 비동기 작업으로 간주되기 시작함.
+        let startTime = Date()
         guard await base.window != nil else {
             throw NeoImageError.responseError(reason: .invalidImageData)
         }
@@ -58,6 +59,8 @@ extension NeoImageWrapper where Base: UIImageView {
                 guard let base else { return }
                 base.image = cachedImage
                 applyTransition(to: base, with: options?.transition)
+                let elapsedTime = Date().timeIntervalSince(startTime)
+                print("loaded in \(String(format: "%.3f", elapsedTime)) seconds")
             }
             
             return ImageLoadingResult(
@@ -96,14 +99,14 @@ extension NeoImageWrapper where Base: UIImageView {
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
     ) async throws -> ImageLoadingResult {
-//        let currentTime = Date()
+        let currentTime = Date()
         let result = try await setImageAsync(
             with: url,
             placeholder: placeholder,
             options: options
         )
         
-//        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
+        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
         return result
     }
 
