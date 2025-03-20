@@ -49,17 +49,26 @@ public final class ImageDownloader: Sendable  {
     }
     
     @discardableResult
-    public func downloadImage(with downloadTask: DownloadTask, for url: URL) async throws -> ImageLoadingResult {
+    public func downloadImage(
+        with downloadTask: DownloadTask,
+        for url: URL,
+        isPriority: Bool = false
+    ) async throws -> ImageLoadingResult {
         let imageData = try await downloadImageData(with: downloadTask)
        
         guard let image = UIImage(data: imageData) else {
             throw NeoImageError.responseError(reason: .invalidImageData)
         }
         
-        let cacheKey = url.absoluteString
-        try? await ImageCache.shared.store(imageData, forKey: cacheKey)
+        let _hashedKey = url.absoluteString.sha256
+        let hashedKey = isPriority ? "priority_\(_hashedKey)" : _hashedKey
+
+        try? await ImageCache.shared.store(
+            imageData,
+            for: hashedKey
+        )
         
-        NeoLogger.shared.debug("Image stored in cache with key: \(cacheKey)")
+        NeoLogger.shared.debug("Image stored in cache with key: \(url.absoluteString)")
         
         return ImageLoadingResult(
             image: image,

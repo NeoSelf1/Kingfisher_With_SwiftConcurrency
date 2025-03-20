@@ -1,7 +1,6 @@
 import Foundation
 
 public actor DiskStorage<T: DataTransformable> {
-    private let name: String
     private let fileManager: FileManager
     private let directoryURL: URL
     private var storageReady = true
@@ -9,16 +8,14 @@ public actor DiskStorage<T: DataTransformable> {
     var maybeCached : Set<String>?
     
     init (
-        name: String,
         fileManager: FileManager
     ) {
-        self.name = name
         self.fileManager = fileManager
-        
         let url = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let cacheName = "com.neon.NeoImage.ImageCache.\(name)"
-        
-        directoryURL = url.appendingPathComponent(cacheName, isDirectory: true)
+        directoryURL = url.appendingPathComponent(
+            "com.neon.NeoImage.ImageCache.default",
+            isDirectory: true
+        )
         
         Task {
             await setupCacheChecking()
@@ -28,7 +25,7 @@ public actor DiskStorage<T: DataTransformable> {
     
     // MARK: - Functions
     
-    func store(value: T, forKey key: String, expiration: StorageExpiration? = nil) async throws {
+    func store(value: T, for hashedKey: String, expiration: StorageExpiration? = nil) async throws {
         guard storageReady else {
             throw NeoImageError.cacheError(reason: .storageNotReady)
         }
@@ -41,7 +38,7 @@ public actor DiskStorage<T: DataTransformable> {
             throw NeoImageError.cacheError(reason: .invalidData)
         }
         
-        let fileURL = cacheFileURL(forKey: key)
+        let fileURL = cacheFileURL(for: hashedKey)
         
         // Foundation 내부 Data 타입의 내장 메서드입니다.
         // 해당 위치로 data 내부 컨텐츠를 write 합니다.
@@ -77,15 +74,15 @@ public actor DiskStorage<T: DataTransformable> {
     
     
     func value(
-        forKey key: String, // 캐시의 키
+        for hashedKey: String,
         actuallyLoad: Bool = true,
-        extendingExpiration: ExpirationExtending = .cacheTime // 현재 Config
+        extendingExpiration: ExpirationExtending = .cacheTime
     ) async throws -> T? {
         guard storageReady else {
             throw NeoImageError.cacheError(reason: .storageNotReady)
         }
         
-        let fileURL = cacheFileURL(forKey: key)
+        let fileURL = cacheFileURL(for: hashedKey)
         let filePath = fileURL.path
         guard maybeCached?.contains(fileURL.lastPathComponent) ?? true else {
             return nil
@@ -124,8 +121,8 @@ public actor DiskStorage<T: DataTransformable> {
     }
     
     /// 특정 키에 해당하는 파일을 삭제하는 메서드
-    func remove(forKey key: String) async throws {
-        let fileURL = cacheFileURL(forKey: key)
+    func remove(for hashedKey: String) async throws {
+        let fileURL = cacheFileURL(for: hashedKey)
         try fileManager.removeItem(at: fileURL)
     }
 
@@ -136,10 +133,10 @@ public actor DiskStorage<T: DataTransformable> {
         try prepareDirectory()
     }
     
-    func isCached(forKey key: String) async -> Bool {
+    func isCached(for hashedKey: String) async -> Bool {
         do {
             let result = try await value(
-                forKey: key,
+                for: hashedKey,
                 actuallyLoad: false
             )
             
@@ -155,24 +152,17 @@ public actor DiskStorage<T: DataTransformable> {
 }
 
 extension DiskStorage {
-    private func cacheFileURL(forKey key: String) -> URL {
-        let fileName = cacheFileName(forKey: key)
-        return directoryURL.appendingPathComponent(fileName, isDirectory: false)
+    private func cacheFileURL(for hashedKey: String) -> URL {
+        return directoryURL.appendingPathComponent(hashedKey, isDirectory: false)
     }
-    
-    /// 사전에 패키지에서 설정된 Config 구조체를 통해 파일명을 해시화하기로 설정했는지 여부, 임의로 전달된 접미사 단어 유무에 따라 캐시될때 저장될 파일명을 변환하여
-    /// 반환해줍니다.
-    private func cacheFileName(forKey key: String) -> String {
-        return key.sha256
-    }
-    
+        
     // MARK: - 만료기간 종료 여부 파악 관련 메서드들
     func removeExpiredValues(referenceDate: Date) throws -> [URL] {
         let propertyKeys: [URLResourceKey] = [
             .isDirectoryKey,
             .contentModificationDateKey
         ]
-
+        
         let urls = try allFileURLs(for: propertyKeys)
         let keys = Set(propertyKeys)
         let expiredFiles = urls.filter { fileURL in
@@ -196,7 +186,7 @@ extension DiskStorage {
               let urls = directoryEnumerator.allObjects as? [URL] else {
             throw NeoImageError.cacheError(reason: .storageNotReady)
         }
-
+        
         return urls
     }
     
@@ -235,6 +225,31 @@ extension DiskStorage {
             storageReady = false
             
             throw NeoImageError.cacheError(reason: .cannotCreateDirectory(error: error))
+        }
+    }
+    
+    func preloadPriorityToMemory() async {
+        do {
+            let prefix = "priority_"
+            let fileURLs = try allFileURLs(for: [.isRegularFileKey, .nameKey])
+            
+            let prefixedFiles = fileURLs.filter { url in
+                let fileName = url.lastPathComponent
+                return fileName.hasPrefix(prefix)
+            }
+            
+            for fileURL in prefixedFiles {
+                let fileName = fileURL.lastPathComponent
+                let hashedKey = fileName.replacingOccurrences(of: "priority_", with: "")
+                
+                if let data = try? Data(contentsOf: fileURL) {
+                    await ImageCache.shared.memoryStorage.store(value: data, for: hashedKey)
+                }
+            }
+            
+            NeoLogger.shared.info("우선순위 이미지 메모리 프리로드 완료")
+        } catch {
+            print("메모리 프리로드 중 오류 발생: \(error)")
         }
     }
 }
