@@ -17,8 +17,11 @@ extension NeoImageCompatible {
 
 /// NeoImage 기능에 접근하기 위한 네임스페이스 역할을 하는 wrapper 구조체
 public struct NeoImageWrapper<Base: Sendable>: Sendable {
+    // MARK: - Properties
 
     public let base: Base
+
+    // MARK: - Lifecycle
 
     /// 여기서 Base는 이미지 캐시 및 이미지 데이터가 주입되는 UIImageView를 의미합니다.
     public init(_ base: Base) {
@@ -38,62 +41,71 @@ extension NeoImageWrapper where Base: UIImageView {
     ) async throws -> ImageLoadingResult {
         // 이미지뷰가 실제로 화면에 표시되어 있는지 여부 파악,
         // 이는 Swift 6로 오면서 비동기 작업으로 간주되기 시작함.
-        let startTime = Date()
         guard await base.window != nil else {
             throw NeoImageError.responseError(reason: .invalidImageData)
         }
 
         if let placeholder {
             await MainActor.run { [weak base] in
-                guard let base else { return }
+                guard let base else {
+                    return
+                }
+
                 base.image = placeholder
             }
         }
-        
-        guard let url else { throw NeoImageError.responseError(reason: .networkError(description: "url invalid")) }
-        
+
+        guard let url else {
+            throw NeoImageError.responseError(reason: .networkError(description: "url invalid"))
+        }
+
         let _hashedKey = url.absoluteString.sha256
-        
         let hashedKey = isPriority ? "priority_\(_hashedKey)" : _hashedKey
-        
+
         if let cachedData = try? await ImageCache.shared.retrieveImage(hashedKey: hashedKey),
            let cachedImage = UIImage(data: cachedData) {
             await MainActor.run { [weak base] in
-                guard let base else { return }
+                guard let base else {
+                    return
+                }
+
                 base.image = cachedImage
                 applyTransition(to: base, with: options?.transition)
-                let elapsedTime = Date().timeIntervalSince(startTime)
-                print("loaded in \(String(format: "%.3f", elapsedTime)) seconds")
             }
-            
+
             return ImageLoadingResult(
                 image: cachedImage,
                 url: url,
                 originalData: cachedData
             )
         }
-        
-        if let task = objc_getAssociatedObject(base, &AssociatedKeys.downloadTask) as? DownloadTask {
+
+        if let task = objc_getAssociatedObject(
+            base,
+            &AssociatedKeys.downloadTask
+        ) as? DownloadTask {
             try await task.cancelWithError()
             setImageDownloadTask(nil)
         }
-        
+
         let downloadTask = try await ImageDownloader.default.createTask(with: url)
         setImageDownloadTask(downloadTask)
-        
+
         let result = try await ImageDownloader.default.downloadImage(
             with: downloadTask,
             for: url,
-            isPriority: isPriority
+            hashedKey: hashedKey
         )
-        
-        // UI 업데이트
+
         await MainActor.run { [weak base] in
-            guard let base else { return }
+            guard let base else {
+                return
+            }
+
             base.image = result.image
             applyTransition(to: base, with: options?.transition)
         }
-        
+
         return result
     }
 
@@ -107,15 +119,11 @@ extension NeoImageWrapper where Base: UIImageView {
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil
     ) async throws -> ImageLoadingResult {
-        let currentTime = Date()
-        let result = try await setImageAsync(
+        try await setImageAsync(
             with: url,
             placeholder: placeholder,
             options: options
         )
-        
-        print("**setImageAsync Done: \(String(format: "%.6f", Date().timeIntervalSince(currentTime)))")
-        return result
     }
 
     /// `Public Completion Handler API`
@@ -123,6 +131,7 @@ extension NeoImageWrapper where Base: UIImageView {
         with url: URL?,
         placeholder: UIImage? = nil,
         options: NeoImageOptions? = nil,
+        isPriority: Bool = false,
         completion: (@MainActor @Sendable (Result<ImageLoadingResult, Error>) -> Void)? = nil
     ) {
         Task { @MainActor in
@@ -130,7 +139,8 @@ extension NeoImageWrapper where Base: UIImageView {
                 let result = try await setImageAsync(
                     with: url,
                     placeholder: placeholder,
-                    options: options
+                    options: options,
+                    isPriority: isPriority
                 )
 
                 completion?(.success(result))
@@ -167,6 +177,7 @@ extension NeoImageWrapper where Base: UIImageView {
             )
         }
     }
+
     // MARK: - Task Management
 
     /// UIImageView는 기본적으로 DownloadTask를 저장할 프로퍼티가 없습니다.
