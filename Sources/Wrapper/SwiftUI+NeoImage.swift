@@ -65,11 +65,11 @@ class NeoImageBinder: ObservableObject {
             let task = try await ImageDownloader.default.createTask(with: url)
             downloadTask = task
             let hashedKey = url.absoluteString.sha256
-            
+
             let result = try await ImageDownloader.default.downloadImage(
                 with: task,
                 for: url,
-                hashedKey:hashedKey
+                hashedKey: hashedKey
             )
 
             loadedImage = result.image

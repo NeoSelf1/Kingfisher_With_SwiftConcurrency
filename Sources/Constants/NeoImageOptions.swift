@@ -9,11 +9,13 @@ import UIKit
 
 /// 이미지 다운로드 및 처리에 관한 옵션을 정의하는 구조체
 public struct NeoImageOptions: Sendable {
+    // MARK: - Properties
+
     public let transition: ImageTransition
 
     /// 캐시 만료 정책
     public let cacheExpiration: StorageExpiration
-    public var cancelOnDisappear: Bool = false
+    public var cancelOnDisappear = false
 
     // MARK: - Lifecycle
 

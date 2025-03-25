@@ -7,6 +7,8 @@ public enum LogLevel: String {
     case log = "LOG"
     case error = "ERROR"
 
+    // MARK: - Computed Properties
+
     var osLogType: OSLogType {
         switch self {
         case .debug: return .debug
@@ -18,20 +20,29 @@ public enum LogLevel: String {
 }
 
 final class NeoLogger: Sendable {
+    // MARK: - Static Properties
+
     public static let shared = NeoLogger()
+
+    // MARK: - Properties
+
     private let dateFormatter: DateFormatter
-    
+
     private let logger: Logger
 
     private let infoHidden = true
-    private let debugHidden = true
-    
+    private let debugHidden = false
+
+    // MARK: - Lifecycle
+
     init() {
         dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         logger = Logger()
     }
-    
+
+    // MARK: - Functions
+
     public func error(
         _ message: String,
         file: String = #file,
@@ -52,8 +63,10 @@ final class NeoLogger: Sendable {
         function: String = #function,
         line _: Int = #line
     ) {
-        guard !infoHidden else { return }
-        
+        guard !infoHidden else {
+            return
+        }
+
         log(
             .info,
             message: message,
@@ -61,15 +74,17 @@ final class NeoLogger: Sendable {
             function: function
         )
     }
-    
+
     public func debug(
         _ message: String,
         file: String = #file,
         function: String = #function,
         line _: Int = #line
     ) {
-        guard !debugHidden else { return }
-        
+        guard !debugHidden else {
+            return
+        }
+
         log(
             .debug,
             message: message,
@@ -80,6 +95,7 @@ final class NeoLogger: Sendable {
 }
 
 // MARK: - Private Methods
+
 extension NeoLogger {
     private func log(
         _ level: LogLevel,
