@@ -16,12 +16,12 @@ public actor DiskStorage<T: DataTransformable> {
     ) {
         self.fileManager = fileManager
         let url = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        
+
         directoryURL = url.appendingPathComponent(
             "com.neon.NeoImage.ImageCache.default",
             isDirectory: true
         )
-        
+
         Task {
             await setupCacheChecking()
             try? await prepareDirectory()
@@ -30,12 +30,13 @@ public actor DiskStorage<T: DataTransformable> {
 
     // MARK: - Functions
 
-    func store(value: T, for hashedKey: String, expiration: StorageExpiration? = nil) async throws {
+    func store(value: T, for hashedKey: String) async throws {
         guard storageReady else {
             throw NeoImageError.cacheError(reason: .storageNotReady)
         }
 
-        let expiration = expiration ?? NeoImageConstants.expiration
+        let expiration = hashedKey.hasPrefix("priority_") ? NeoImageConstants
+            .expirationForPriority : NeoImageConstants.expiration
 
         guard !expiration.isExpired else {
             return
@@ -111,7 +112,6 @@ public actor DiskStorage<T: DataTransformable> {
                 return obj
             case .cacheTime:
                 expirationDate = NeoImageConstants.expiration.estimatedExpirationSinceNow
-            // .expirationTime: 지정된 새로운 만료 시간으로 연장
             case let .expirationTime(storageExpiration):
                 expirationDate = storageExpiration.estimatedExpirationSinceNow
             }
@@ -238,25 +238,22 @@ extension DiskStorage {
 
     func preloadPriorityToMemory() async {
         do {
-            let prefix = "priority_"
+            print(directoryURL)
             let fileURLs = try allFileURLs(for: [.isRegularFileKey, .nameKey])
-
             let prefixedFiles = fileURLs.filter { url in
                 let fileName = url.lastPathComponent
-                return fileName.hasPrefix(prefix)
+                return fileName.hasPrefix("priority_")
             }
 
             for fileURL in prefixedFiles {
-                let fileName = fileURL.lastPathComponent
-                let hashedKey = fileName.replacingOccurrences(of: "priority_", with: "")
+                let hashedKey = fileURL.lastPathComponent
 
-                print("fileURL from preload:", fileURL)
                 if let data = try? Data(contentsOf: fileURL) {
                     await ImageCache.shared.memoryStorage.store(value: data, for: hashedKey)
                 }
             }
 
-            NeoLogger.shared.info("우선순위 이미지 메모리 프리로드 완료")
+            NeoLogger.shared.debug("\(prefixedFiles.count)개의 우선순위 이미지 메모리 프리로드 완료")
         } catch {
             print("메모리 프리로드 중 오류 발생: \(error)")
         }
