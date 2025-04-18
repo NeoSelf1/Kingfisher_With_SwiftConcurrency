@@ -9,15 +9,6 @@ Kingfisher를 분석하여 핵심 기능을 가져오면서도 Swift의 async/aw
 ✅ 우선순위 기반 이미지 캐싱 전략
 
 
-## 설치 방법
-#### Swift Package Manager
-```swift
-dependencies: [
-    .package(url: "https://github.com/yourusername/NeoImage.git", from: "1.0.0")
-]
-```
-
-
 ## 사용 방법
 ```swift
 // 이미지 로드
